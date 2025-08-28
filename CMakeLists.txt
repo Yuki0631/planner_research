@@ -26,3 +26,18 @@ add_executable(lexer_pair_test
     tests/lexer_pair_test.cpp
 )
 target_include_directories(lexer_pair_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+# 既存の lexer ライブラリ
+add_library(planner_lexer STATIC src/lexer.cpp)
+target_include_directories(planner_lexer PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+# parser を静的ライブラリ化
+add_library(planner_parser STATIC src/parser.cpp)
+target_link_libraries(planner_parser PUBLIC planner_lexer)
+target_include_directories(planner_parser PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+# デモ実行ファイル
+add_executable(parse_demo tests/parse_demo.cpp)
+target_link_libraries(parse_demo PRIVATE planner_parser)
+target_include_directories(parse_demo PRIVATE ${CMAKE_SOURCE_DIR}/include)
+

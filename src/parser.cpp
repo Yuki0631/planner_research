@@ -1,0 +1,396 @@
+#include "parser.hpp"
+#include <stdexcept>
+#include <sstream>
+
+namespace planner {
+
+// 位置情報を付加するヘルパ関数
+static std::string loc(const Token& t){
+    std::ostringstream oss;
+    oss << " at " << t.loc.line << ":" << t.loc.col;
+    return oss.str();
+}
+
+// ---文字列ユーティリティ関数---
+// 命題を文字列化する関数
+std::string Parser::to_string(const Atom& a){
+    std::ostringstream oss;
+    oss << "(" << a.pred;
+    for (auto& s : a.args) oss << " " << s;
+    oss << ")";
+    return oss.str();
+}
+
+// 論理式を文字列化する関数
+std::string Parser::to_string(const Formula& f){
+    std::ostringstream oss;
+    if (f.kind == Formula::ATOM) {
+        oss << to_string(f.atom);
+    } else if (f.kind == Formula::AND) {
+        oss << "(and";
+        for (auto& c : f.children) oss << " " << to_string(c);
+        oss << ")";
+    } else {
+        oss << "(not " << to_string(*f.child) << ")";
+    }
+    return oss.str();
+}
+
+// ---予想したトークンを取得する関数---
+// 名前を取得する関数
+std::string Parser::expectName(const char* what){
+    auto t = lex_.next();
+    if (t.type != TokenType::NAME)
+        throw std::runtime_error(std::string("Expected NAME for ") + what + loc(t));
+    return t.lexeme;
+}
+
+// キーワードを取得する関数
+std::string Parser::expectKeyword(const char* what){
+    auto t = lex_.next();
+    if (t.type != TokenType::KEYWORD)
+        throw std::runtime_error(std::string("Expected KEYWORD for ") + what + loc(t));
+    return t.lexeme;
+}
+
+// ---再帰下降のための式---
+// 命題の解析を行う関数
+Atom Parser::parseAtomWithHead(const std::string& head){
+    Atom a; a.pred = head;
+    while (lex_.peek().type != TokenType::RPAR) {
+        auto t = lex_.next();
+        if (t.type == TokenType::NAME || t.type == TokenType::VARIABLE) {
+            a.args.push_back(t.lexeme);
+        } else {
+            throw std::runtime_error("term expected (name or variable)"+loc(t));
+        }
+    }
+    lex_.expect(TokenType::RPAR, ")");
+    return a;
+}
+
+// 左括弧を読んだ後に、parseAtomWithHeadを呼び出す
+Atom Parser::parseAtom(){
+    lex_.expect(TokenType::LPAR, "(");
+    auto head = lex_.expect(TokenType::NAME, "predicate name").lexeme;
+    return parseAtomWithHead(head);
+}
+
+// 論理式を解析する関数
+Formula Parser::parseFormula(){
+    // 先頭は '(' 
+    lex_.expect(TokenType::LPAR, "(");
+    auto head = lex_.next();
+    if (head.type == TokenType::NAME && head.lexeme == "and") { // and の場合
+        Formula f; 
+        f.kind = Formula::AND;
+        while (lex_.peek().type != TokenType::RPAR) {
+            f.children.push_back(parseFormula()); // 再帰的に読み込む
+        }
+        lex_.expect(TokenType::RPAR, ")");
+        return f;
+    } else if (head.type == TokenType::NAME && head.lexeme == "not") { // not の場合
+        Formula f; 
+        f.kind = Formula::NOT;
+        f.child = std::make_unique<Formula>(parseFormula()); // 再帰的に読み込む
+        lex_.expect(TokenType::RPAR, ")");
+        return f;
+    } else if (head.type == TokenType::NAME) {
+        // '(' + NAME で始まる => atom
+        Formula f; f.kind = Formula::ATOM;
+        f.atom = parseAtomWithHead(head.lexeme); // ここでは '(' 済み
+        return f;
+    } else {
+        throw std::runtime_error("formula head must be NAME 'and'/'not'/predicate"+loc(head));
+    }
+}
+
+// ---var list: (?x ?y - T ?z - U)---
+std::vector<TypedVar> Parser::parseVarListInParens(){
+    lex_.expect(TokenType::LPAR, "(");
+    std::vector<TypedVar> out;
+    std::vector<std::string> buf; // ?x ?y などタイプ未確定のバッファ
+    while (true){
+        auto t = lex_.peek();
+        if (t.type == TokenType::RPAR) {
+            lex_.next(); // consume ')'
+            // 残りがあればobject型として登録する
+            for (auto& v : buf) out.push_back({v, "object"});
+            buf.clear();
+            break;
+        }
+        t = lex_.next();
+        if (t.type == TokenType::VARIABLE) {
+            buf.push_back(t.lexeme);
+        } else if (t.type == TokenType::DASH) {
+            std::string ty = expectName("type name after '-'"); // ty means type
+            for (auto& v : buf) out.push_back({v, ty});
+            buf.clear();
+        } else {
+            throw std::runtime_error("variable or '-' expected in var list"+loc(t));
+        }
+    }
+    return out;
+}
+
+// ---Domain---
+// requirements 部分の解析
+std::vector<std::string> Parser::parseRequirementsSection(){
+    // 直前で '(:requirements' の ':' は消費済みなので、ここでは本体だけ読む
+    std::vector<std::string> r;
+    while (lex_.peek().type != TokenType::RPAR) {
+        auto k = lex_.expect(TokenType::KEYWORD, "requirement keyword");
+        r.push_back(k.lexeme);
+    }
+    lex_.expect(TokenType::RPAR, ")");
+    return r;
+}
+
+// 変数のタイプの解析
+void parseTypesSectionInto(Domain& d) {
+    std::vector<std::string> buf; // 子候補用のバッファ
+    while (lex_.peek().type != TokenType::RPAR) {
+        auto t = lex_.next();
+        if (t.type == TokenType::NAME) {
+            buf.push_back(t.lexeme);
+            d.types.push_back(t.lexeme); // 型名リストにも入れる
+        } else if (t.type == TokenType::DASH) {
+            std::string parent = expectName("super type");
+            d.types.push_back(parent);
+            for (auto& child : buf) {
+                d.supertypes[child].push_back(parent);
+            }
+            buf.clear();
+        } else {
+            throw std::runtime_error("unexpected token in :types" + loc(t));
+        }
+    }
+    lex_.expect(TokenType::RPAR, ")");
+
+    // 残った型は明示的な親が無いので object 直下にぶら下げる
+    for (auto& child : buf) {
+        d.supertypes[child].push_back("object");
+    }
+    // object 自体が宣言されていない場合のために object も登録する
+    d.types.push_back("object");
+}
+
+// 述語スキーマの解析
+std::vector<PredicateSchema> Parser::parsePredicatesSection(){
+    std::vector<PredicateSchema> ps;
+    while (lex_.peek().type != TokenType::RPAR) {
+        lex_.expect(TokenType::LPAR, "(");
+        PredicateSchema s;
+        s.name = expectName("predicate name");
+        // パラメータ列（'?'と'-'の並び）を閉じ括弧まで読む
+        std::vector<std::string> buf;
+        while (lex_.peek().type != TokenType::RPAR) {
+            auto t = lex_.next();
+            if (t.type == TokenType::VARIABLE) {
+                buf.push_back(t.lexeme);
+            } else if (t.type == TokenType::DASH) {
+                std::string ty = expectName("type name");
+                for (auto& v : buf) s.params.push_back({v, ty});
+                buf.clear();
+            } else {
+                throw std::runtime_error("variable or '-' expected in predicate params"+loc(t));
+            }
+        }
+        lex_.expect(TokenType::RPAR, ")");
+
+        // 型が付かなかった残りはobject型として入れる
+        for (auto& v : buf) s.params.push_back({v, "object"});
+        ps.push_back(std::move(s));
+    }
+    lex_.expect(TokenType::RPAR, ")");
+    return ps;
+}
+
+// アクションの解析
+Action Parser::parseActionSection(){
+    Action a;
+    a.name = expectName("action name"); // アクション名
+
+    // :parameters
+    if (expectKeyword(":parameters?").compare("parameters") != 0)
+        throw std::runtime_error("expected :parameters in action");
+    a.params = parseVarListInParens(); // アクションの引数リスト
+
+    // :precondition <formula>
+    if (expectKeyword(":precondition?").compare("precondition") != 0)
+        throw std::runtime_error("expected :precondition in action");
+    a.precond = parseFormula(); // アクションの前提条件
+
+    // :effect <formula>
+    if (expectKeyword(":effect?").compare("effect") != 0)
+        throw std::runtime_error("expected :effect in action");
+    a.effect = parseFormula(); // アクションの効果
+
+    // アクションの閉じ括弧は呼び出し元が読む
+    return a;
+}
+
+// ドメインの解析
+Domain Parser::parseDomain(){
+    Domain d;
+
+    // (define (domain NAME) ... ) の形を予想して読み込む
+    lex_.expect(TokenType::LPAR, "(");
+    if (expectName("'define'").compare("define") != 0)
+        throw std::runtime_error("expected define");
+    lex_.expect(TokenType::LPAR, "(");
+    if (expectName("'domain'").compare("domain") != 0)
+        throw std::runtime_error("expected (domain NAME)");
+    d.name = expectName("domain name");
+    lex_.expect(TokenType::RPAR, ")");
+
+    // セクションを読む
+    while (true) {
+        auto t = lex_.peek();
+
+        if (t.type == TokenType::RPAR) { lex_.next(); break; } // domainの解析を終える
+
+        lex_.expect(TokenType::LPAR, "(");
+        auto kw = expectKeyword("section keyword");
+
+        // :requirements
+        if (kw == "requirements") {
+            d.requirements = parseRequirementsSection();
+            continue;
+        }
+
+        // :types
+        if (kw == "types") {
+            parseTypesSectionInto(d);
+            continue;
+        }
+
+        // :predicates
+        if (kw == "predicates") {
+            d.predicates = parsePredicatesSection();
+            continue;
+        }
+
+        // :action
+        if (kw == "action") {
+            Action a = parseActionSection();
+            lex_.expect(TokenType::RPAR, ")"); // :action ブロックの ')'
+            d.actions.push_back(std::move(a));
+            continue;
+        }
+
+        // 未対応セクションは、 ) までスキップする。ただし、セクションの追加を後にする場合は、ここに追加する
+        while (lex_.peek().type != TokenType::RPAR) (void)lex_.next();
+        lex_.expect(TokenType::RPAR, ")");
+    }
+
+    return d;
+}
+
+// ---Problem---
+// objects セクションの解析
+std::vector<std::pair<std::string,std::string>> Parser::parseObjectsSection(){
+    std::vector<std::pair<std::string,std::string>> objs;
+    std::vector<std::string> buf;
+    while (lex_.peek().type != TokenType::RPAR) {
+        auto t = lex_.next();
+        if (t.type == TokenType::NAME) {
+            buf.push_back(t.lexeme);
+        } else if (t.type == TokenType::DASH) {
+            std::string ty = expectName("type name");
+            for (auto& n : buf) objs.push_back({n, ty});
+            buf.clear();
+        } else {
+            throw std::runtime_error("NAME or '-' expected in :objects"+loc(t));
+        }
+    }
+    lex_.expect(TokenType::RPAR, ")");
+    // 残りはobject型として登録する
+    for (auto& n : buf) objs.push_back({n, "object"});
+    return objs;
+}
+
+// init セクションの解析
+std::vector<Atom> Parser::parseInitSection(){
+    std::vector<Atom> init;
+    while (lex_.peek().type != TokenType::RPAR) {
+        init.push_back(parseAtom()); // init はアトム列（andやnotを使わない）
+    }
+    lex_.expect(TokenType::RPAR, ")");
+    return init;
+}
+
+// 問題の解析
+Problem Parser::parseProblem(){
+    Problem p;
+
+    // (define (problem NAME) (:domain NAME) ... ) の冒頭部分を解析する
+    lex_.expect(TokenType::LPAR, "(");
+    if (expectName("'define'").compare("define") != 0)
+        throw std::runtime_error("expected define");
+    lex_.expect(TokenType::LPAR, "(");
+    if (expectName("'problem'").compare("problem") != 0)
+        throw std::runtime_error("expected (problem NAME)");
+    p.name = expectName("problem name");
+    lex_.expect(TokenType::RPAR, ")");
+
+    // 必須: (:domain NAME)
+    lex_.expect(TokenType::LPAR, "(");
+    if (expectKeyword(":domain").compare("domain") != 0)
+        throw std::runtime_error("expected :domain");
+    p.domain_name = expectName("domain name");
+    lex_.expect(TokenType::RPAR, ")");
+
+    // 残りセクション
+    while (true) {
+        auto t = lex_.peek();
+        if (t.type == TokenType::RPAR) { lex_.next(); break; } // problem 閉じ
+        lex_.expect(TokenType::LPAR, "(");
+        auto kw = expectKeyword("problem section");
+
+        // :objects
+        if (kw == "objects") {
+            p.objects = parseObjectsSection();
+            continue;
+        }
+
+        // :init
+        if (kw == "init") {
+            p.init = parseInitSection();
+            continue;
+        }
+
+        // :goal
+        if (kw == "goal") {
+            p.goal = parseFormula();
+            lex_.expect(TokenType::RPAR, ")");
+            continue;
+        }
+
+        // 未対応セクションは ) までスキップ
+        while (lex_.peek().type != TokenType::RPAR) (void)lex_.next();
+        lex_.expect(TokenType::RPAR, ")");
+    }
+
+    return p;
+}
+
+// ---補助関数---
+// サブタイプか判定する関数
+static bool is_subtype(const Domain& d, const std::string& child, const std::string& want) {
+    if (child == want) return true;
+    std::vector<std::string> stack = {child};
+    std::unordered_set<std::string> seen;
+    while (!stack.empty()) {
+        std::string cur = stack.back(); stack.pop_back();
+        if (!seen.insert(cur).second) continue;
+        auto it = d.supertypes.find(cur);
+        if (it == d.supertypes.end()) continue;
+        for (auto& p : it->second) { // it: (child, parents)
+            if (p == want) return true;
+            stack.push_back(p);
+        }
+    }
+}
+
+} // namespace planner

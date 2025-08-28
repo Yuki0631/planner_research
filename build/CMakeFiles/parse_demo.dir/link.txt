@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/parse_demo.dir/tests/parse_demo.cpp.o -o parse_demo  libplanner_parser.a libplanner_lexer.a 

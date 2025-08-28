@@ -142,6 +142,45 @@ lexer_pair_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/lexer_pair_test.dir/build.make CMakeFiles/lexer_pair_test.dir/build
 .PHONY : lexer_pair_test/fast
 
+#=============================================================================
+# Target rules for targets named planner_lexer
+
+# Build rule for target.
+planner_lexer: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 planner_lexer
+.PHONY : planner_lexer
+
+# fast build rule for target.
+planner_lexer/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_lexer.dir/build.make CMakeFiles/planner_lexer.dir/build
+.PHONY : planner_lexer/fast
+
+#=============================================================================
+# Target rules for targets named planner_parser
+
+# Build rule for target.
+planner_parser: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 planner_parser
+.PHONY : planner_parser
+
+# fast build rule for target.
+planner_parser/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_parser.dir/build.make CMakeFiles/planner_parser.dir/build
+.PHONY : planner_parser/fast
+
+#=============================================================================
+# Target rules for targets named parse_demo
+
+# Build rule for target.
+parse_demo: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 parse_demo
+.PHONY : parse_demo
+
+# fast build rule for target.
+parse_demo/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parse_demo.dir/build.make CMakeFiles/parse_demo.dir/build
+.PHONY : parse_demo/fast
+
 src/grounding.o: src/grounding.cpp.o
 .PHONY : src/grounding.o
 
@@ -197,6 +236,7 @@ src/lexer.o: src/lexer.cpp.o
 src/lexer.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_not_fd.dir/build.make CMakeFiles/planner_not_fd.dir/src/lexer.cpp.o
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/lexer_pair_test.dir/build.make CMakeFiles/lexer_pair_test.dir/src/lexer.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_lexer.dir/build.make CMakeFiles/planner_lexer.dir/src/lexer.cpp.o
 .PHONY : src/lexer.cpp.o
 
 src/lexer.i: src/lexer.cpp.i
@@ -206,6 +246,7 @@ src/lexer.i: src/lexer.cpp.i
 src/lexer.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_not_fd.dir/build.make CMakeFiles/planner_not_fd.dir/src/lexer.cpp.i
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/lexer_pair_test.dir/build.make CMakeFiles/lexer_pair_test.dir/src/lexer.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_lexer.dir/build.make CMakeFiles/planner_lexer.dir/src/lexer.cpp.i
 .PHONY : src/lexer.cpp.i
 
 src/lexer.s: src/lexer.cpp.s
@@ -215,6 +256,7 @@ src/lexer.s: src/lexer.cpp.s
 src/lexer.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_not_fd.dir/build.make CMakeFiles/planner_not_fd.dir/src/lexer.cpp.s
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/lexer_pair_test.dir/build.make CMakeFiles/lexer_pair_test.dir/src/lexer.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_lexer.dir/build.make CMakeFiles/planner_lexer.dir/src/lexer.cpp.s
 .PHONY : src/lexer.cpp.s
 
 src/main.o: src/main.cpp.o
@@ -247,6 +289,7 @@ src/parser.o: src/parser.cpp.o
 # target to build an object file
 src/parser.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_not_fd.dir/build.make CMakeFiles/planner_not_fd.dir/src/parser.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_parser.dir/build.make CMakeFiles/planner_parser.dir/src/parser.cpp.o
 .PHONY : src/parser.cpp.o
 
 src/parser.i: src/parser.cpp.i
@@ -255,6 +298,7 @@ src/parser.i: src/parser.cpp.i
 # target to preprocess a source file
 src/parser.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_not_fd.dir/build.make CMakeFiles/planner_not_fd.dir/src/parser.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_parser.dir/build.make CMakeFiles/planner_parser.dir/src/parser.cpp.i
 .PHONY : src/parser.cpp.i
 
 src/parser.s: src/parser.cpp.s
@@ -263,6 +307,7 @@ src/parser.s: src/parser.cpp.s
 # target to generate assembly for a file
 src/parser.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_not_fd.dir/build.make CMakeFiles/planner_not_fd.dir/src/parser.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/planner_parser.dir/build.make CMakeFiles/planner_parser.dir/src/parser.cpp.s
 .PHONY : src/parser.cpp.s
 
 src/strips.o: src/strips.cpp.o
@@ -313,6 +358,30 @@ tests/lexer_pair_test.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/lexer_pair_test.dir/build.make CMakeFiles/lexer_pair_test.dir/tests/lexer_pair_test.cpp.s
 .PHONY : tests/lexer_pair_test.cpp.s
 
+tests/parse_demo.o: tests/parse_demo.cpp.o
+.PHONY : tests/parse_demo.o
+
+# target to build an object file
+tests/parse_demo.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parse_demo.dir/build.make CMakeFiles/parse_demo.dir/tests/parse_demo.cpp.o
+.PHONY : tests/parse_demo.cpp.o
+
+tests/parse_demo.i: tests/parse_demo.cpp.i
+.PHONY : tests/parse_demo.i
+
+# target to preprocess a source file
+tests/parse_demo.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parse_demo.dir/build.make CMakeFiles/parse_demo.dir/tests/parse_demo.cpp.i
+.PHONY : tests/parse_demo.cpp.i
+
+tests/parse_demo.s: tests/parse_demo.cpp.s
+.PHONY : tests/parse_demo.s
+
+# target to generate assembly for a file
+tests/parse_demo.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/parse_demo.dir/build.make CMakeFiles/parse_demo.dir/tests/parse_demo.cpp.s
+.PHONY : tests/parse_demo.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -322,7 +391,10 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... lexer_pair_test"
+	@echo "... parse_demo"
+	@echo "... planner_lexer"
 	@echo "... planner_not_fd"
+	@echo "... planner_parser"
 	@echo "... src/grounding.o"
 	@echo "... src/grounding.i"
 	@echo "... src/grounding.s"
@@ -344,6 +416,9 @@ help:
 	@echo "... tests/lexer_pair_test.o"
 	@echo "... tests/lexer_pair_test.i"
 	@echo "... tests/lexer_pair_test.s"
+	@echo "... tests/parse_demo.o"
+	@echo "... tests/parse_demo.i"
+	@echo "... tests/parse_demo.s"
 .PHONY : help
 
 
