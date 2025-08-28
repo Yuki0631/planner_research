@@ -20,3 +20,9 @@ add_executable(planner_not_fd
   src/heuristic.cpp
 )
 target_include_directories(planner_not_fd PRIVATE include)
+
+add_executable(lexer_pair_test
+    src/lexer.cpp
+    tests/lexer_pair_test.cpp
+)
+target_include_directories(lexer_pair_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
