@@ -40,6 +40,16 @@ int main(int argc, char** argv){
                 }
                 std::cout << ")\n";
             }
+            std::cout << "  functions:\n";
+            for (auto& fn : D.functions) {
+                std::cout << "    " << fn.name << "(";
+                for (size_t i=0;i<fn.params.size();++i){
+                    if (i) std::cout << ", ";
+                    std::cout << fn.params[i].name;
+                    if (!fn.params[i].type.empty()) std::cout << " - " << fn.params[i].type;
+                }
+                std::cout << ") : " << fn.rettype << "\n";
+            }
             std::cout << "  actions:\n";
             for (auto& a : D.actions) {
                 std::cout << "    " << a.name << " params(";
@@ -70,6 +80,11 @@ int main(int argc, char** argv){
             std::cout << "\n  init:\n";
             for (auto& a : Pr.init) std::cout << "    " << Parser::to_string(a) << "\n";
             std::cout << "  goal: " << Parser::to_string(Pr.goal) << "\n";
+            if (Pr.metric.present) {
+                std::cout << "  metric: "
+                          << (Pr.metric.sense == planner::Problem::Metric::MINIMIZE ? "minimize" : "maximize")
+                          << " " << Parser::to_string(Pr.metric.expr) << "\n";
+            }
         }
 
         return 0;

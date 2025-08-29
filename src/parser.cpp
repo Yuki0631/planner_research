@@ -32,11 +32,32 @@ std::string Parser::to_string(const Formula& f){
         oss << "(and";
         for (auto& c : f.children) oss << " " << to_string(c);
         oss << ")";
+    } else if (f.kind == Formula::INCREASE) {
+        oss << "(increase " << to_string(f.inc.lhs) << " " << to_string(f.inc.rhs) << ")";
     } else {
         oss << "(not " << to_string(*f.child) << ")";
     }
     return oss.str();
 }
+
+// 関数項を文字列化する関数
+std::string Parser::to_string(const FuncTerm& ft){
+    std::ostringstream oss;
+    oss << "(" << ft.name;
+    for (auto& s : ft.args) oss << " " << s;
+    oss << ")";
+    return oss.str();
+}
+
+// 数値式を文字列化する関数
+std::string Parser::to_string(const NumExpr& ne){
+    if (ne.kind == NumExpr::CONST) {
+        std::ostringstream oss; oss << ne.value; return oss.str();
+    } else {
+        return to_string(ne.func);
+    }
+}
+
 
 // ---予想したトークンを取得する関数---
 // 名前を取得する関数
@@ -53,6 +74,41 @@ std::string Parser::expectKeyword(const char* what){
     if (t.type != TokenType::KEYWORD)
         throw std::runtime_error(std::string("Expected KEYWORD for ") + what + loc(t));
     return t.lexeme;
+}
+
+// ---関数項と数値式---
+// 関数項を解析する関数
+FuncTerm Parser::parseFuncTermInParens(){
+    lex_.expect(TokenType::LPAR, "(");
+    FuncTerm ft;
+    ft.name = lex_.expect(TokenType::NAME, "function name").lexeme;
+    while (lex_.peek().type != TokenType::RPAR) {
+        auto t = lex_.next();
+        if (t.type == TokenType::NAME || t.type == TokenType::VARIABLE) {
+            ft.args.push_back(t.lexeme);
+        } else {
+            throw std::runtime_error("term expected (name or variable) in function term" + loc(t));
+        }
+    }
+    lex_.expect(TokenType::RPAR, ")");
+    return ft;
+}
+
+// 数値式を解析する関数
+NumExpr Parser::parseNumericExpr(){
+    // number or (func-term)
+    auto t = lex_.peek();
+    NumExpr ne;
+    if (t.type == TokenType::NUMBER) {
+        ne.kind = NumExpr::CONST;
+        ne.value = std::stod(lex_.next().lexeme);
+    } else if (t.type == TokenType::LPAR) {
+        ne.kind = NumExpr::FUNC;
+        ne.func = parseFuncTermInParens();
+    } else {
+        throw std::runtime_error("numeric expr expected (number or (func ...))" + loc(t));
+    }
+    return ne;
 }
 
 // ---再帰下降のための式---
@@ -95,6 +151,13 @@ Formula Parser::parseFormula(){
         Formula f; 
         f.kind = Formula::NOT;
         f.child = std::make_unique<Formula>(parseFormula()); // 再帰的に読み込む
+        lex_.expect(TokenType::RPAR, ")");
+        return f;
+    } else if (head.type == TokenType::NAME && head.lexeme == "increase") {
+        Formula f; f.kind = Formula::INCREASE;
+        // (increase <lvalue:(func-term)> <rhs:(num-expr)>)
+        f.inc.lhs = parseFuncTermInParens();
+        f.inc.rhs = parseNumericExpr();
         lex_.expect(TokenType::RPAR, ")");
         return f;
     } else if (head.type == TokenType::NAME) {
@@ -391,6 +454,20 @@ std::vector<Atom> Parser::parseInitSection(){
     return init;
 }
 
+// metric セクションの解析
+void Parser::parseMetricSectionInto(Problem& p){
+    // (:metric minimize <num-expr>) / (:metric maximize <num-expr>)
+    auto senseName = lex_.expect(TokenType::NAME, "minimize/maximize").lexeme;
+    if (senseName == "minimize")      p.metric.sense = Problem::Metric::MINIMIZE;
+    else if (senseName == "maximize") p.metric.sense = Problem::Metric::MAXIMIZE;
+    else throw std::runtime_error("metric sense must be 'minimize' or 'maximize'");
+
+    p.metric.expr = parseNumericExpr();
+    p.metric.present = true;
+
+    lex_.expect(TokenType::RPAR, ")"); // :metric の閉じ括弧 (右括弧)
+}
+
 // 問題の解析
 Problem Parser::parseProblem(){
     Problem p;
@@ -435,6 +512,12 @@ Problem Parser::parseProblem(){
         if (kw == "goal") {
             p.goal = parseFormula();
             lex_.expect(TokenType::RPAR, ")");
+            continue;
+        }
+
+        // :metric
+        if (kw == "metric") {
+            parseMetricSectionInto(p);
             continue;
         }
 

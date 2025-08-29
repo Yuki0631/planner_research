@@ -20,16 +20,38 @@ struct Atom {
     std::vector<std::string> args;
 };
 
+// 数値式で使う関数呼出部分
+struct FuncTerm {
+    std::string name;
+    std::vector<std::string> args; // 変数名 or 定数名
+};
+
+// 数値定数または関数値用
+struct NumExpr {
+    enum Kind { CONST, FUNC } kind = CONST;
+    double value = 0.0; // kind==CONST
+    FuncTerm func;      // kind==FUNC
+};
+
 // 論理式
 struct Formula {
-    enum Kind { ATOM, AND, NOT }
+    enum Kind { ATOM, AND, NOT, INCREASE }
 
     kind = ATOM; // デフォルトではATOM
 
     Atom atom; // kind==ATOM
     std::vector<Formula> children; // kind==AND
     std::unique_ptr<Formula> child; // kind==NOT
+
+    struct Inc
+    {
+        FuncTerm lhs; // 左辺
+        NumExpr rhs;  // 右辺
+    };
+    Inc inc; // kind==INCREASE
 };
+
+
 
 // functions スキーマ
 struct FunctionSchema {
@@ -52,6 +74,13 @@ struct Action {
     Formula effect;
 };
 
+// メトリック
+struct Metric {
+        enum Sense { MINIMIZE, MAXIMIZE } sense = MINIMIZE;
+        NumExpr expr;
+        bool present = false;
+};
+
 // ドメイン
 struct Domain {
     std::string name;
@@ -70,6 +99,7 @@ struct Problem {
     std::vector<std::pair<std::string,std::string>> objects; // (name,type)
     std::vector<Atom> init;
     Formula goal; // and/not/atom のみ対応
+    Metric metric; // メトリック
 };
 
 // ---Parser（再帰下降）---
@@ -83,7 +113,9 @@ public:
     // デバッグ用表示関数
     static std::string to_string(const Formula& f);
     static std::string to_string(const Atom& a);
-
+    static std::string to_string(const FuncTerm& ft);
+    static std::string to_string(const NumExpr& ne);
+    
 private:
     Lexer& lex_;
 
@@ -96,6 +128,10 @@ private:
     Atom    parseAtomWithHead(const std::string& head); // 命題の解析を行う関数
     Atom    parseAtom(); // 命題の解析をparseAtomWithHeadに委譲する関数
 
+    // 関数項と数値式
+    FuncTerm parseFuncTermInParens();
+    NumExpr  parseNumericExpr();
+
     // Domainセクション
     std::vector<std::string> parseRequirementsSection(); // 'requirements' の後ろ
     void parseTypesSectionInto(Domain& d); // 'types' の後ろ
@@ -106,6 +142,7 @@ private:
     // Problemセクション
     std::vector<std::pair<std::string,std::string>> parseObjectsSection(); // objects
     std::vector<Atom> parseInitSection(); // init
+    void parseMetricSectionInto(Problem& p); // metric
 
     // 型付き変数列（(?x ?y - T ?z - U) など）
     std::vector<TypedVar> parseVarListInParens();
