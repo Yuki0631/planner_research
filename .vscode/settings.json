@@ -1,3 +1,6 @@
 {
-    "cmake.sourceDirectory": "/wsl.localhost/Ubuntu/home/yuki_suzuki/planner_not_fd"
+    "cmake.sourceDirectory": "/wsl.localhost/Ubuntu/home/yuki_suzuki/planner_not_fd",
+    "files.associations": {
+        "memory": "cpp"
+    }
 }

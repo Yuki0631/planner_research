@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include <unordered_map>
 #include <memory>
 #include "lexer.hpp"
@@ -89,7 +90,7 @@ private:
 
     // Domainセクション
     std::vector<std::string> parseRequirementsSection(); // 'requirements' の後ろ
-    std::vector<std::string> parseTypesSectionInfo(); // 'types' の後ろ
+    void parseTypesSectionInto(Domain& d); // 'types' の後ろ
     std::vector<PredicateSchema> parsePredicatesSection(); // 'predicates' の後ろ
     Action parseActionSection(); // :action ～ の塊
 

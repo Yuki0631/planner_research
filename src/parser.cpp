@@ -1,4 +1,6 @@
 #include "parser.hpp"
+#include <unordered_set>
+#include <unordered_map>
 #include <stdexcept>
 #include <sstream>
 
@@ -147,7 +149,7 @@ std::vector<std::string> Parser::parseRequirementsSection(){
 }
 
 // 変数のタイプの解析
-void parseTypesSectionInto(Domain& d) {
+void Parser::parseTypesSectionInto(Domain& d) {
     std::vector<std::string> buf; // 子候補用のバッファ
     while (lex_.peek().type != TokenType::RPAR) {
         auto t = lex_.next();
@@ -391,6 +393,7 @@ static bool is_subtype(const Domain& d, const std::string& child, const std::str
             stack.push_back(p);
         }
     }
+    return false; // サブタイプではない場合
 }
 
 } // namespace planner
