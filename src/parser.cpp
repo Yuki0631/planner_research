@@ -458,8 +458,8 @@ std::vector<Atom> Parser::parseInitSection(){
 void Parser::parseMetricSectionInto(Problem& p){
     // (:metric minimize <num-expr>) / (:metric maximize <num-expr>)
     auto senseName = lex_.expect(TokenType::NAME, "minimize/maximize").lexeme;
-    if (senseName == "minimize")      p.metric.sense = Problem::Metric::MINIMIZE;
-    else if (senseName == "maximize") p.metric.sense = Problem::Metric::MAXIMIZE;
+    if (senseName == "minimize")      p.metric.sense = Metric::MINIMIZE;
+    else if (senseName == "maximize") p.metric.sense = Metric::MAXIMIZE;
     else throw std::runtime_error("metric sense must be 'minimize' or 'maximize'");
 
     p.metric.expr = parseNumericExpr();
