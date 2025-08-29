@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/planner_not_fd.dir/src/main.cpp.o CMakeFiles/planner_not_fd.dir/src/lexer.cpp.o CMakeFiles/planner_not_fd.dir/src/parser.cpp.o CMakeFiles/planner_not_fd.dir/src/grounding.cpp.o CMakeFiles/planner_not_fd.dir/src/strips.cpp.o CMakeFiles/planner_not_fd.dir/src/heuristic.cpp.o -o planner_not_fd 

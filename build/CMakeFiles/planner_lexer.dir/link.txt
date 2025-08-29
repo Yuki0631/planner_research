@@ -1,2 +1,0 @@
-/usr/bin/ar qc libplanner_lexer.a CMakeFiles/planner_lexer.dir/src/lexer.cpp.o
-/usr/bin/ranlib libplanner_lexer.a

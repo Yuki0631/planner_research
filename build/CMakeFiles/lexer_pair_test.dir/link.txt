@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/lexer_pair_test.dir/src/lexer.cpp.o CMakeFiles/lexer_pair_test.dir/tests/lexer_pair_test.cpp.o -o lexer_pair_test 
