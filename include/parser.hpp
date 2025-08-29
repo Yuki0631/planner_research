@@ -31,6 +31,13 @@ struct Formula {
     std::unique_ptr<Formula> child; // kind==NOT
 };
 
+// functions スキーマ
+struct FunctionSchema {
+    std::string name;
+    std::vector<TypedVar> params;
+    std::string rettype = "number"; 
+};
+
 // 述語スキーマ
 struct PredicateSchema {
     std::string name;
@@ -51,6 +58,7 @@ struct Domain {
     std::vector<std::string> requirements;  // strips, typing など
     std::vector<std::string> types;
     std::vector<PredicateSchema> predicates;
+    std::vector<FunctionSchema> functions;
     std::vector<Action> actions;
     std::unordered_map<std::string, std::vector<std::string>> supertypes; // type の 下位から上位へのマップ (複数の親を許容)
 };
@@ -92,6 +100,7 @@ private:
     std::vector<std::string> parseRequirementsSection(); // 'requirements' の後ろ
     void parseTypesSectionInto(Domain& d); // 'types' の後ろ
     std::vector<PredicateSchema> parsePredicatesSection(); // 'predicates' の後ろ
+    std::vector<FunctionSchema> parseFunctionsSection(); // function 用の追加関数
     Action parseActionSection(); // :action ～ の塊
 
     // Problemセクション

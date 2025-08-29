@@ -208,6 +208,69 @@ std::vector<PredicateSchema> Parser::parsePredicatesSection(){
     return ps;
 }
 
+// function の解析
+std::vector<FunctionSchema> Parser::parseFunctionsSection() {
+    std::vector<FunctionSchema> out;
+
+    // :functions の中身は、( ... ) の並び＋任意の "- <type>" 指定が続く形
+    // ex1: (:functions (total-cost) - number)
+    // ex2: (:functions (distance ?a - loc ?b - loc) - number (fuel) - number)
+    // ex3: (:functions (foo ?x ?y) (bar ?z) - number)
+
+    while (lex_.peek().type != TokenType::RPAR) {
+        // group に ( ... ) の並びを保存する
+        std::vector<FunctionSchema> group;
+
+        // 少なくとも1個の "( ... )" を読む
+        do {
+            lex_.expect(TokenType::LPAR, "(");
+            FunctionSchema fs;
+            fs.name = expectName("function name"); // 関数名
+
+            // パラメータ列（'?x ... - T ...'）を ')' まで読む
+            std::vector<std::string> buf;
+            while (lex_.peek().type != TokenType::RPAR) {
+                auto t = lex_.next();
+                if (t.type == TokenType::VARIABLE) {
+                    buf.push_back(t.lexeme);
+                } else if (t.type == TokenType::DASH) {
+                    std::string ty = expectName("type name after '-'");
+                    for (auto& v : buf) fs.params.push_back({v, ty});
+                    buf.clear();
+                } else {
+                    throw std::runtime_error("variable or '-' expected in function params" + loc(t));
+                }
+            }
+            lex_.expect(TokenType::RPAR, ")");
+
+            // 型が付かなかった残りは object 型
+            for (auto& v : buf) fs.params.push_back({v, "object"});
+
+            // 既定の戻り型は "number"
+            fs.rettype = "number";
+
+            group.push_back(std::move(fs));
+
+            // 次が '(' なら同じ group に積み増す
+            // '(' でなければ break
+        } while (lex_.peek().type == TokenType::LPAR);
+
+        // group 直後に "- <type>" が来たら、その型を group 全体へ適用
+        if (lex_.peek().type == TokenType::DASH) {
+            lex_.next(); // consume '-'
+            std::string rt = expectName("function return type name after '-'");
+            for (auto& fs : group) fs.rettype = rt;
+        }
+
+        // group を out に追加
+        for (auto& fs : group) out.push_back(std::move(fs));
+    }
+
+    lex_.expect(TokenType::RPAR, ")"); // :functions ブロック終端
+    return out;
+}
+
+
 // アクションの解析
 Action Parser::parseActionSection(){
     Action a;
@@ -270,6 +333,12 @@ Domain Parser::parseDomain(){
         // :predicates
         if (kw == "predicates") {
             d.predicates = parsePredicatesSection();
+            continue;
+        }
+
+        // :functions
+        if (kw == "functions") {
+            d.functions = parseFunctionsSection();
             continue;
         }
 
