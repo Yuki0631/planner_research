@@ -454,6 +454,37 @@ std::vector<Atom> Parser::parseInitSection(){
     return init;
 }
 
+// init セクションの解析 (数値 init が含まれている init 用)
+void Parser::parseInitSectionInto(Problem& p) {
+    while (lex_.peek().type != TokenType::RPAR) {
+        lex_.expect(TokenType::LPAR, "(");
+        auto head = lex_.next();
+
+        // (= <func-term> <number>) の場合
+        if (head.type == TokenType::NAME && head.lexeme == "=") {
+            NumericInit ni;
+            ni.lhs = parseFuncTermInParens();   // ex: (total-cost)
+            NumExpr rhs = parseNumericExpr();   // ex: 0
+            if (rhs.kind != NumExpr::CONST)
+                throw std::runtime_error("RHS of numeric init must be a number" + loc(lex_.peek()));
+            ni.value = rhs.value;
+            lex_.expect(TokenType::RPAR, ")");
+            p.init_num.push_back(std::move(ni));
+            continue;
+        }
+
+        // 命題の場合
+        if (head.type == TokenType::NAME) {
+            Atom a = parseAtomWithHead(head.lexeme);
+            p.init.push_back(std::move(a));
+            continue;
+        }
+
+        throw std::runtime_error("invalid init item head" + loc(head));
+    }
+    lex_.expect(TokenType::RPAR, ")");
+}
+
 // metric セクションの解析
 void Parser::parseMetricSectionInto(Problem& p){
     // (:metric minimize <num-expr>) / (:metric maximize <num-expr>)
@@ -504,7 +535,7 @@ Problem Parser::parseProblem(){
 
         // :init
         if (kw == "init") {
-            p.init = parseInitSection();
+            parseInitSectionInto(p);
             continue;
         }
 

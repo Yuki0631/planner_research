@@ -92,12 +92,19 @@ struct Domain {
     std::unordered_map<std::string, std::vector<std::string>> supertypes; // type の 下位から上位へのマップ (複数の親を許容)
 };
 
+// 初期化に数値が含まれる場合用の struct
+struct NumericInit {
+    FuncTerm lhs;   // 例: (total-cost)
+    double   value; // 例: 0
+};
+
 // 問題インスタンス
 struct Problem {
     std::string name;
     std::string domain_name;
     std::vector<std::pair<std::string,std::string>> objects; // (name,type)
     std::vector<Atom> init;
+    std::vector<NumericInit> init_num;
     Formula goal; // and/not/atom のみ対応
     Metric metric; // メトリック
 };
@@ -115,7 +122,7 @@ public:
     static std::string to_string(const Atom& a);
     static std::string to_string(const FuncTerm& ft);
     static std::string to_string(const NumExpr& ne);
-    
+
 private:
     Lexer& lex_;
 
@@ -142,6 +149,7 @@ private:
     // Problemセクション
     std::vector<std::pair<std::string,std::string>> parseObjectsSection(); // objects
     std::vector<Atom> parseInitSection(); // init
+    void parseInitSectionInto(Problem& p); // 数値 init 用の追加関数
     void parseMetricSectionInto(Problem& p); // metric
 
     // 型付き変数列（(?x ?y - T ?z - U) など）
