@@ -623,23 +623,6 @@ Problem Parser::parseProblem(){
     return p;
 }
 
-// ---補助関数---
-// サブタイプか判定する関数
-static bool is_subtype(const Domain& d, const std::string& child, const std::string& want) {
-    if (child == want) return true;
-    std::vector<std::string> stack = {child};
-    std::unordered_set<std::string> seen;
-    while (!stack.empty()) {
-        std::string cur = stack.back(); stack.pop_back();
-        if (!seen.insert(cur).second) continue;
-        auto it = d.supertypes.find(cur);
-        if (it == d.supertypes.end()) continue;
-        for (auto& p : it->second) { // it: (child, parents)
-            if (p == want) return true;
-            stack.push_back(p);
-        }
-    }
-    return false; // サブタイプではない場合
-}
+
 
 } // namespace planner

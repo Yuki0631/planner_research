@@ -7,6 +7,23 @@
 namespace planner {
 
 // --- 内部で使う補助関数 ---
+// サブタイプか判定する関数
+static bool is_subtype(const Domain& d, const std::string& child, const std::string& want) {
+    if (child == want) return true;
+    std::vector<std::string> stack = {child};
+    std::unordered_set<std::string> seen;
+    while (!stack.empty()) {
+        std::string cur = stack.back(); stack.pop_back();
+        if (!seen.insert(cur).second) continue;
+        auto it = d.supertypes.find(cur);
+        if (it == d.supertypes.end()) continue;
+        for (auto& p : it->second) { // it: (child, parents)
+            if (p == want) return true;
+            stack.push_back(p);
+        }
+    }
+    return false; // サブタイプではない場合
+}
 
 // 関数名と引数の組み合わせを string 形式に変換する関数
 static std::string func_key(const std::string& name, const std::vector<std::string>& args) {
@@ -71,7 +88,7 @@ static void collect_literals_pre(const Formula& f,
 static void collect_effects(const Formula& f,
                             std::vector<Atom>& add,
                             std::vector<Atom>& del,
-                            std::vector<Formula::Increase>& incs)
+                            std::vector<Increase>& incs)
 {
     if (f.kind == Formula::ATOM) { // 命題の場合
         add.push_back(f.atom);
@@ -313,7 +330,7 @@ GroundTask ground(const Domain& d, const Problem& p)
         auto emit_grounded = [&](const std::unordered_map<std::string,std::string>& sigma) {
             // pre/effect を抽出して代入
             std::vector<Atom> preP, preN, effA, effD;
-            std::vector<Formula::Increase> incs;
+            std::vector<Increase> incs;
 
             collect_literals_pre(act.precond, preP, preN); // 前提条件のリテラルを集める
             collect_effects(act.effect, effA, effD, incs); // 効果のリテラルを集める
