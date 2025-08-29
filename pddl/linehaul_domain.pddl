@@ -8,7 +8,7 @@
 
     (:predicates
         (at ?t - truck ?l - location)
-        (free_capacity ?t -truck ?q - quantity)
+        (free_capacity ?t - truck ?q - quantity)
         (demand_chilled_goods ?l - location ?q - quantity)
         (demand_ambient_goods ?l - location ?q - quantity)
         (plus1 ?q1 ?q2 - quantity)
