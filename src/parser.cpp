@@ -51,12 +51,28 @@ std::string Parser::to_string(const FuncTerm& ft){
 
 // 数値式を文字列化する関数
 std::string Parser::to_string(const NumExpr& ne){
-    if (ne.kind == NumExpr::CONST) {
+    if (ne.kind == NumExpr::CONST) { // 定数の場合
         std::ostringstream oss; oss << ne.value; return oss.str();
-    } else {
+    }
+    if (ne.kind == NumExpr::FUNC) { // 関数の場合
         return to_string(ne.func);
     }
+    // 演算子ノード
+    char sym = '?';
+    switch (ne.kind) {
+        case NumExpr::ADD: sym = '+'; break;
+        case NumExpr::SUB: sym = '-'; break;
+        case NumExpr::MUL: sym = '*'; break;
+        case NumExpr::DIV: sym = '/'; break;
+        default: break;
+    }
+    std::ostringstream oss;
+    oss << "(" << sym;
+    for (auto& a : ne.args) oss << " " << to_string(a);
+    oss << ")";
+    return oss.str();
 }
+
 
 
 // ---予想したトークンを取得する関数---
@@ -96,20 +112,67 @@ FuncTerm Parser::parseFuncTermInParens(){
 
 // 数値式を解析する関数
 NumExpr Parser::parseNumericExpr(){
-    // number or (func-term)
     auto t = lex_.peek();
-    NumExpr ne;
+
+    // 定数の場合
     if (t.type == TokenType::NUMBER) {
-        ne.kind = NumExpr::CONST;
+        NumExpr ne; ne.kind = NumExpr::CONST;
         ne.value = std::stod(lex_.next().lexeme);
-    } else if (t.type == TokenType::LPAR) {
-        ne.kind = NumExpr::FUNC;
-        ne.func = parseFuncTermInParens();
-    } else {
-        throw std::runtime_error("numeric expr expected (number or (func ...))" + loc(t));
+        return ne;
     }
-    return ne;
+
+    // 括弧で始まる場合
+    if (t.type == TokenType::LPAR) {
+        lex_.expect(TokenType::LPAR, "(");
+        auto head = lex_.next(); // NAME("+","*","/") または DASH(" - ")
+
+
+        // 関数の定義
+        auto make_op = [&](NumExpr::Kind k){
+            NumExpr ne;
+            ne.kind = k;
+            while (lex_.peek().type != TokenType::RPAR) {
+                ne.args.push_back(parseNumericExpr()); // 再帰
+            }
+            lex_.expect(TokenType::RPAR, ")");
+            return ne;
+        };
+
+        // head が演算子である場合
+        if (head.type == TokenType::NAME &&
+            (head.lexeme == "+" || head.lexeme == "*" || head.lexeme == "/")) {
+            if (head.lexeme == "+") return make_op(NumExpr::ADD);
+            if (head.lexeme == "*") return make_op(NumExpr::MUL);
+            return make_op(NumExpr::DIV); /* "/" */ 
+        }
+        if (head.type == TokenType::DASH) { // 先頭が '-' のとき
+            return make_op(NumExpr::SUB);
+        }
+
+        // head が関数名である場合
+        if (head.type == TokenType::NAME) {
+            FuncTerm ft;
+            ft.name = head.lexeme;
+            while (lex_.peek().type != TokenType::RPAR) {
+                auto a = lex_.next();
+                if (a.type == TokenType::NAME || a.type == TokenType::VARIABLE) {
+                    ft.args.push_back(a.lexeme);
+                } else {
+                    throw std::runtime_error(
+                        "term expected (name or variable) in function term" + loc(a));
+                }
+            }
+            lex_.expect(TokenType::RPAR, ")");
+            NumExpr ne; ne.kind = NumExpr::FUNC; ne.func = std::move(ft);
+            return ne;
+        }
+
+        throw std::runtime_error("numeric expr head must be + - * / or function name" + loc(head));
+    }
+
+    throw std::runtime_error("numeric expr expected (number or '(' ... ')')" + loc(t));
 }
+
 
 // ---再帰下降のための式---
 // 命題の解析を行う関数

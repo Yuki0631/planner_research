@@ -28,9 +28,10 @@ struct FuncTerm {
 
 // 数値定数または関数値用
 struct NumExpr {
-    enum Kind { CONST, FUNC } kind = CONST;
-    double value = 0.0; // kind==CONST
-    FuncTerm func;      // kind==FUNC
+    enum Kind { CONST, FUNC, ADD, SUB, MUL, DIV } kind = CONST;
+    double value = 0.0;           // CONST
+    FuncTerm func;                // FUNC
+    std::vector<NumExpr> args;    // ADD/SUB/MUL/DIV 用
 };
 
 // 論理式
