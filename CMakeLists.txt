@@ -21,23 +21,35 @@ add_executable(planner_not_fd
 )
 target_include_directories(planner_not_fd PRIVATE include)
 
+## ライブラリ化
+# lexer
+add_library(planner_lexer STATIC src/lexer.cpp)
+target_include_directories(planner_lexer PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+# parser
+add_library(planner_parser STATIC src/parser.cpp)
+target_link_libraries(planner_parser PUBLIC planner_lexer)
+target_include_directories(planner_parser PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+# grounding
+add_library(planner_grounding STATIC src/grounding.cpp)
+target_link_libraries(planner_grounding PUBLIC planner_parser)
+target_include_directories(planner_grounding PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+## テスト実行ファイル
+# lexer
 add_executable(lexer_pair_test
     src/lexer.cpp
     tests/lexer_pair_test.cpp
 )
 target_include_directories(lexer_pair_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
-# 既存の lexer ライブラリ
-add_library(planner_lexer STATIC src/lexer.cpp)
-target_include_directories(planner_lexer PUBLIC ${CMAKE_SOURCE_DIR}/include)
-
-# parser を静的ライブラリ化
-add_library(planner_parser STATIC src/parser.cpp)
-target_link_libraries(planner_parser PUBLIC planner_lexer)
-target_include_directories(planner_parser PUBLIC ${CMAKE_SOURCE_DIR}/include)
-
-# デモ実行ファイル
+# parser
 add_executable(parse_demo tests/parse_demo.cpp)
 target_link_libraries(parse_demo PRIVATE planner_parser)
 target_include_directories(parse_demo PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
+# grounding
+add_executable(grounding_test tests/grounding_test.cpp)
+target_link_libraries(grounding_test PRIVATE planner_grounding)
+target_include_directories(grounding_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
