@@ -82,7 +82,7 @@ int main(int argc, char** argv){
             std::cout << "  goal: " << Parser::to_string(Pr.goal) << "\n";
             if (Pr.metric.present) {
                 std::cout << "  metric: "
-                          << (Pr.metric.sense == planner::Problem::Metric::MINIMIZE ? "minimize" : "maximize")
+                          << (Pr.metric.sense == planner::Metric::MINIMIZE ? "minimize" : "maximize")
                           << " " << Parser::to_string(Pr.metric.expr) << "\n";
             }
         }
