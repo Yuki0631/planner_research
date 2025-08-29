@@ -44,12 +44,12 @@ struct Formula {
     std::vector<Formula> children; // kind==AND
     std::unique_ptr<Formula> child; // kind==NOT
 
-    struct Inc
+    struct Increase
     {
         FuncTerm lhs; // 左辺
         NumExpr rhs;  // 右辺
     };
-    Inc inc; // kind==INCREASE
+    Increase inc; // kind==INCREASE
 };
 
 

@@ -26,7 +26,7 @@ int main() {
                  (not (switch_is_on))
                  (increase (total-cost) 1)))
 )"
-    );
+);
 
     const char* prob = R"(
 (define (problem p1)
@@ -36,7 +36,7 @@ int main() {
   (:goal (switch_is_on))
   (:metric minimize (total-cost))
 )"
-    );
+);
 
     // parse
     {

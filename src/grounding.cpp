@@ -89,7 +89,7 @@ static void collect_literals_pre(const Formula& f,
 static void collect_effects(const Formula& f,
                             std::vector<Atom>& add,
                             std::vector<Atom>& del,
-                            std::vector<Formula>& incs)
+                            std::vector<Formula::Increase>& incs)
 {
     if (f.kind == Formula::ATOM) { // 命題の場合
         add.push_back(f.atom);
@@ -106,7 +106,7 @@ static void collect_effects(const Formula& f,
         return;
     }
     if (f.kind == Formula::INCREASE) { // increase が含まれる場合はエラー
-        incs.push_back(f);
+        incs.push_back(f.inc);
         return;
     }
     // サポートされていないノードの場合はエラー
@@ -331,7 +331,7 @@ GroundTask ground(const Domain& d, const Problem& p)
         auto emit_grounded = [&](const std::unordered_map<std::string,std::string>& sigma) {
             // pre/effect を抽出して代入
             std::vector<Atom> preP, preN, effA, effD;
-            std::vector<Formula> incs;
+            std::vector<Formula::Increase> incs;
 
             collect_literals_pre(act.precond, preP, preN); // 前提条件のリテラルを集める
             collect_effects(act.effect, effA, effD, incs); // 効果のリテラルを集める
@@ -366,8 +366,7 @@ GroundTask ground(const Domain& d, const Problem& p)
 
             // コスト計算： (increase (total-cost) <expr>) のみ拾う
             double cost = 0.0;
-            for (const auto& incF : incs) {
-                const auto& inc = incF.inc;
+            for (const auto& inc : incs) {
                 if (inc.lhs.name == "total-cost") {
                     // 変数→オブジェクトの対応表を作る（NumExpr の FuncTerm 引数で使用）
                     std::unordered_map<std::string,std::string> var2obj;
