@@ -53,3 +53,7 @@ target_include_directories(parse_demo PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_executable(grounding_test tests/grounding_test.cpp)
 target_link_libraries(grounding_test PRIVATE planner_grounding)
 target_include_directories(grounding_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+add_executable(grounding_generic_test tests/grounding_generic_test.cpp)
+target_link_libraries(grounding_generic_test PRIVATE planner_grounding)
+target_include_directories(grounding_generic_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
