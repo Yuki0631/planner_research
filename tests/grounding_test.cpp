@@ -1,6 +1,7 @@
 #include <cassert>
 #include <iostream>
 #include <string>
+#include <cmath>
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "grounding.hpp"
@@ -25,8 +26,9 @@ int main() {
     :effect (and (switch_is_off)
                  (not (switch_is_on))
                  (increase (total-cost) 1)))
+)
 )"
-);
+;
 
     const char* prob = R"(
 (define (problem p1)
@@ -35,8 +37,9 @@ int main() {
   (:init (switch_is_off) (= (total-cost) 0))
   (:goal (switch_is_on))
   (:metric minimize (total-cost))
+)
 )"
-);
+;
 
     // parse
     {
