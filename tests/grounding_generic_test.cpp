@@ -24,7 +24,6 @@ static void print_usage(const char* argv0) {
 static void dump_problem_objects(const Problem& Pr) {
     std::cerr << "== Problem Objects ==" << "\n";
     for (const auto& o : Pr.objects) {
-        // 例えば o.name と o.type がある想定。実装に合わせて調整してください。
         std::cerr << "  " << o.first << " : " << o.second << "\n";
     }
 }
