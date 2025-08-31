@@ -38,10 +38,6 @@ static std::string func_key(const std::string& name, const std::vector<std::stri
     return oss.str();
 }
 
-// 変数名かどうか（"?" で始まるかどうか）
-static bool is_variable(const std::string& s) {
-    return !s.empty() && s[0] == '?';
-}
 
 // 述語スキーマを端から検索する関数
 static const PredicateSchema& find_pred(const Domain& d, const std::string& name) {
@@ -119,10 +115,8 @@ static Atom subst_atom(const Atom& a, const std::unordered_map<std::string,std::
     b.pred = a.pred;
     b.args.reserve(a.args.size());
     for (auto& s : a.args) {
-        if (is_variable(s)) {
-            auto it = sigma.find(s);
-            if (it == sigma.end()) // 見つからなかった場合はエラー
-                throw std::runtime_error("unbound variable in atom: " + s);
+        auto it = sigma.find(s);
+        if (it != sigma.end()) {
             b.args.push_back(it->second);
         } else {
             b.args.push_back(s);
@@ -195,12 +189,11 @@ static double eval_numeric(const NumExpr& ne,
             std::vector<std::string> args;
             args.reserve(ne.func.args.size());
             for (auto& a : ne.func.args) {
-                if (is_variable(a)) {
-                    auto it = sigma.find(a); // var -> obj のマッピング　
-                    if (it == sigma.end()) throw std::runtime_error("unbound var in func term: "+a);
+                auto it = sigma.find(a);
+                if (it != sigma.end()) {
                     args.push_back(it->second);
                 } else {
-                    args.push_back(a); // 定数または関数の場合
+                    args.push_back(a);
                 }
             }
             std::string key = func_key(ne.func.name, args);
