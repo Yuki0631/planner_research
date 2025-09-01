@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <chrono>
 
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -33,6 +34,7 @@ int main(int argc, char** argv) {
     const std::string domain_path  = argv[1];
     const std::string problem_path = argv[2];
     const bool dump = (argc >= 4 && std::string(argv[3]) == "--dump");
+    
 
     try {
         const std::string dom  = slurp_file(domain_path);
@@ -48,7 +50,11 @@ int main(int argc, char** argv) {
         dump_problem_objects(Pr);
 
         // ---- grounding ----
+        auto start = std::chrono::high_resolution_clock::now();
         GroundTask G = ground(D, Pr);
+        auto end = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> elapsed = end - start;
+        std::cout << "Grounding took " << elapsed.count() << " seconds\n";
 
         // ---- basic checks ----
         assert(!G.preds.empty());

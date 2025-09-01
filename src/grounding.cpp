@@ -251,6 +251,14 @@ inline std::string key_of(const GroundAtom& ga) {
     return oss.str();
 }
 
+// pred id とオブジェクト id 群から R+/init 用キーを直で作る（ground_atom を呼ばない）
+static inline std::string key_of_ids(int pid, const std::vector<int>& ids) {
+    std::ostringstream oss;
+    oss << pid << ":";
+    for (int id : ids) oss << id << ",";
+    return oss.str();
+}
+
 
 // ---グラウンド化を行う主要関数---
 
@@ -341,6 +349,12 @@ GroundTask ground(const Domain& d, const Problem& p)
 
     // actions
     for (const auto& act : d.actions) {
+        // テンプレートとしての pre/effect を集める
+        std::vector<Atom> preP_tmpl, preN_tmpl, effA_tmpl, effD_tmpl;
+        std::vector<Formula::Increase> incs_tmpl;
+        collect_literals_pre(act.precond, preP_tmpl, preN_tmpl);
+        collect_effects(act.effect, effA_tmpl, effD_tmpl, incs_tmpl);
+
         // 各パラメータに適合するオブジェクト候補集合
         std::vector<std::vector<std::string>> cand; // 各パラメータに対するオブジェクト候補のリストが順に入る
         cand.resize(act.params.size());
@@ -363,30 +377,66 @@ GroundTask ground(const Domain& d, const Problem& p)
         std::vector<size_t> idx(act.params.size(), 0);
         auto vars = var_types(act.params); // 各パラメータと型のマップ
 
-        auto emit_grounded = [&](const std::unordered_map<std::string,std::string>& sigma) {
-            G.stats.candidates++; // 候補の数のカウントを 1 増やす
+        // sigma の展開、先に早期チェックを行うラムダ関数
+        auto make_ground_action = [&](const std::unordered_map<std::string,std::string>& sigma) {
+            G.stats.candidates++; // 候補カウント
 
-            // pre/effect を抽出して代入
-            std::vector<Atom> preP, preN, effA, effD;
-            std::vector<Formula::Increase> incs;
+            // --- all-different による早期チェック ---
+            if (act.params.size() > 1) {
+                std::unordered_set<std::string> seen;
+                for (auto& tv : act.params) {
+                    const std::string& obj = sigma.at(tv.name);
+                    if (!seen.insert(obj).second) { // すでに出た object ならば 
+                        G.stats.by_typing_allDiff++;
+                        return; 
+                    }
+                }
+            }
 
-            collect_literals_pre(act.precond, preP, preN); // 前提条件のリテラルを集める
-            collect_effects(act.effect, effA, effD, incs); // 効果のリテラルを集める
+            // --- 静的述語の早期チェック ---
+            auto is_static_atom = [&](const Atom& a)->bool {
+                auto it = G.pred_id.find(a.pred);
+                return (it != G.pred_id.end()) && is_static_pred(it->second); // 述語が見つかり、かつ静的なら true
+            };
 
-            // 代入、置換によって各リテラルを更新
-            for (auto& a : preP) a = subst_atom(a, sigma);
-            for (auto& a : preN) a = subst_atom(a, sigma);
-            for (auto& a : effA) a = subst_atom(a, sigma);
-            for (auto& a : effD) a = subst_atom(a, sigma);
+            auto holds_in_init = [&](const Atom& a_after_subst, bool positive)->bool {
+                auto pit = G.pred_id.find(a_after_subst.pred); // 述語の ID を取得
+                if (pit == G.pred_id.end()) return false; // 未宣言述語ならば false
+                std::vector<int> ids;
+                ids.reserve(a_after_subst.args.size());
+                for (auto& obj : a_after_subst.args) {
+                    auto oit = G.obj_id.find(obj);
+                    if (oit == G.obj_id.end()) return false;
+                    ids.push_back(oit->second);
+                }
+                bool in_init = init_set.count(key_of_ids(pit->second, ids));
+                return positive ? in_init : !in_init; // positive の場合は in_init を返し、そうでなければ !in_init を返す
+            };
 
-            // ground かつ型チェック
+            // preP_tmpl / preN_tmpl のうち静的なものだけ eval
+            for (const auto& a : preP_tmpl) {
+                if (!is_static_atom(a)) continue;
+                if (!holds_in_init(subst_atom(a, sigma), /*positive=*/true)) { // positive なので true を渡す
+                    G.stats.by_static++;
+                    return;
+                }
+            }
+            for (const auto& a : preN_tmpl) {
+                if (!is_static_atom(a)) continue;
+                if (!holds_in_init(subst_atom(a, sigma), /*positive=*/false)) { // negative なので false を渡す
+                    G.stats.by_static++;
+                    return;
+                }
+            }
+
+            // --- ここまで通過した sigma のみ、初めて ground 化を行う ---
             GroundAction ga;
             {
                 std::ostringstream nm;
                 nm << act.name;
                 if (!act.params.empty()) {
                     nm << "[";
-                    for (size_t i=0;i<act.params.size();++i) { // パラメータの名前を列挙する
+                    for (size_t i=0;i<act.params.size();++i) {
                         if (i) nm << ",";
                         nm << sigma.at(act.params[i].name);
                     }
@@ -395,66 +445,45 @@ GroundTask ground(const Domain& d, const Problem& p)
                 ga.name = nm.str();
             }
 
+            // pre/effect は テンプレ を 代入 してから ground_atom に渡す
+            std::vector<Atom> preP = preP_tmpl, preN = preN_tmpl, effA = effA_tmpl, effD = effD_tmpl;
+
+            // 代入、置換によって各リテラルを更新
+            for (auto& a : preP) a = subst_atom(a, sigma);
+            for (auto& a : preN) a = subst_atom(a, sigma);
+            for (auto& a : effA) a = subst_atom(a, sigma);
+            for (auto& a : effD) a = subst_atom(a, sigma);
+
             // Ground 化する
             for (auto& a : preP) ga.pre_pos.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
             for (auto& a : preN) ga.pre_neg.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
             for (auto& a : effA) ga.eff_add.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
             for (auto& a : effD) ga.eff_del.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
 
-            // コスト計算： (increase (total-cost) <expr>) のみ拾う
+            // cost（incs_tmpl をそのまま使う）
             double cost = 0.0;
-            for (const auto& inc : incs) {
+            for (const auto& inc : incs_tmpl) {
                 if (inc.lhs.name == "total-cost") {
-                    // 変数→オブジェクトの対応表を作る（NumExpr の FuncTerm 引数で使用）
+                    // 変数名とオブジェクト名の対応を作成
                     std::unordered_map<std::string,std::string> var2obj;
                     for (auto& tv : act.params) var2obj[tv.name] = sigma.at(tv.name);
                     cost += eval_numeric(inc.rhs, G.func_values, var2obj); // 置換に基づいて評価する
                 }
             }
             ga.cost = cost;
-
-
-            // --- 簡易的な All-Different : パラメータの値が衝突したら棄却 ---
-            auto allDifferent = [&](){
-                if (act.params.size() <= 1) return true;
-                std::unordered_set<std::string> seen;
-                for (auto& tv : act.params){
-                    const std::string& obj = sigma.at(tv.name);
-                    if (!seen.insert(obj).second) return false; // すでに出た object ならば
-                }
-                return true;
-            };
-            if (!allDifferent()) { G.stats.by_typing_allDiff++; return; } // もし衝突していたら棄却
-
-            // --- 静的述語チェック ---
-            // pre_pos のうち静的なものは init に含まれていなければ矛盾
-            for (const auto& pr : ga.pre_pos){
-                if (is_static_pred(pr.pred) && !init_set.count(key_of(pr))) { // 述語が静的 (positive) で、init に含まれていなかったら矛盾
-                    G.stats.by_static++;
-                    return;
-                }
-            }
-
-            // pre_neg のうち静的なものは init に含まれていたら矛盾
-            for (const auto& nr : ga.pre_neg){
-                if (is_static_pred(nr.pred) && init_set.count(key_of(nr))) { // 述語が静的 (negative) で、init に含まれていたら矛盾
-                    G.stats.by_static++;
-                    return;
-                }
-            }
-
-            G.actions.push_back(std::move(ga)); // 最後に GroundTask に追加する
+            G.actions.push_back(std::move(ga));
         };
 
+
         if (act.params.empty()) { // パラメータがない場合は、置換なしで出力する
-            emit_grounded({}); 
+            make_ground_action({}); 
         } else {
             while (true) { // 直積ループを行う
                 std::unordered_map<std::string,std::string> sigma;
                 for (size_t i=0;i<act.params.size();++i) {
                     sigma[act.params[i].name] = cand[i][idx[i]];
                 }
-                emit_grounded(sigma);
+                make_ground_action(sigma);
 
                 // 次の組み合わせへ
                 size_t k = act.params.size();
@@ -467,6 +496,8 @@ GroundTask ground(const Domain& d, const Problem& p)
             }
         }
     }
+
+        
 
     // --- 前向き到達可能性による pruning ---
     // R+ を init から開始
