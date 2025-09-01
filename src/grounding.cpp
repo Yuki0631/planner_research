@@ -241,6 +241,17 @@ std::string to_string(const GroundAtom& ga, const GroundTask& gt) {
     return oss.str();
 }
 
+// GroundAtom のキーを生成する関数
+inline std::string key_of(const GroundAtom& ga) {
+    std::ostringstream oss;
+    oss << ga.pred << ":";
+    for (int id : ga.args) {
+        oss << id << ",";
+    }
+    return oss.str();
+}
+
+
 // ---グラウンド化を行う主要関数---
 
 GroundTask ground(const Domain& d, const Problem& p)
@@ -289,6 +300,11 @@ GroundTask ground(const Domain& d, const Problem& p)
         G.init_pos.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
     }
 
+    // init のハッシュ集合（静的述語チェックで使う）を一度だけ構築
+    std::unordered_set<std::string> init_set;
+    init_set.reserve(G.init_pos.size() * 2);
+    for (auto& f : G.init_pos) init_set.insert(key_of(f));
+
     // goal
     {
         std::vector<Atom> gp, gn;
@@ -296,6 +312,32 @@ GroundTask ground(const Domain& d, const Problem& p)
         for (auto& a : gp) G.goal_pos.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
         for (auto& a : gn) G.goal_neg.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
     }
+
+    // --- 静的述語の検出 ---
+    // 使用するデータ構造
+    std::vector<bool> is_dynamic;
+    is_dynamic.resize(G.preds.size(), false);
+
+    // 動的述語をマークするためのラムダ関数
+    auto mark_dynamic_from = [&](const Formula& eff){
+        std::vector<Atom> add, del;
+        std::vector<Formula::Increase> incs;
+        collect_effects(eff, add, del, incs); 
+        auto mark = [&](const Atom& a){
+            auto it = G.pred_id.find(a.pred);
+            if (it != G.pred_id.end()) is_dynamic[it->second] = true; // 見つかった場合は動的にする
+        };
+        for (auto& a : add) mark(a);
+        for (auto& a : del) mark(a);
+    };
+
+
+    // effect に基づいて動的述語をマークする
+    for (const auto& act : d.actions) mark_dynamic_from(act.effect);
+
+    // 静的かどうかテストするラムダ関数
+    auto is_static_pred = [&](int pid){ return !is_dynamic[pid]; }; // 述語 id を受け取り、vector<bool> を参照して静的かどうかを判定する
+
 
     // actions
     for (const auto& act : d.actions) {
@@ -322,6 +364,8 @@ GroundTask ground(const Domain& d, const Problem& p)
         auto vars = var_types(act.params); // 各パラメータと型のマップ
 
         auto emit_grounded = [&](const std::unordered_map<std::string,std::string>& sigma) {
+            G.stats.candidates++; // 候補の数のカウントを 1 増やす
+
             // pre/effect を抽出して代入
             std::vector<Atom> preP, preN, effA, effD;
             std::vector<Formula::Increase> incs;
@@ -369,6 +413,36 @@ GroundTask ground(const Domain& d, const Problem& p)
             }
             ga.cost = cost;
 
+
+            // --- 簡易的な All-Different : パラメータの値が衝突したら棄却 ---
+            auto allDifferent = [&](){
+                if (act.params.size() <= 1) return true;
+                std::unordered_set<std::string> seen;
+                for (auto& tv : act.params){
+                    const std::string& obj = sigma.at(tv.name);
+                    if (!seen.insert(obj).second) return false; // すでに出た object ならば
+                }
+                return true;
+            };
+            if (!allDifferent()) { G.stats.by_typing_allDiff++; return; } // もし衝突していたら棄却
+
+            // --- 静的述語チェック ---
+            // pre_pos のうち静的なものは init に含まれていなければ矛盾
+            for (const auto& pr : ga.pre_pos){
+                if (is_static_pred(pr.pred) && !init_set.count(key_of(pr))) { // 述語が静的 (positive) で、init に含まれていなかったら矛盾
+                    G.stats.by_static++;
+                    return;
+                }
+            }
+
+            // pre_neg のうち静的なものは init に含まれていたら矛盾
+            for (const auto& nr : ga.pre_neg){
+                if (is_static_pred(nr.pred) && init_set.count(key_of(nr))) { // 述語が静的 (negative) で、init に含まれていたら矛盾
+                    G.stats.by_static++;
+                    return;
+                }
+            }
+
             G.actions.push_back(std::move(ga)); // 最後に GroundTask に追加する
         };
 
@@ -393,6 +467,97 @@ GroundTask ground(const Domain& d, const Problem& p)
             }
         }
     }
+
+    // --- 前向き到達可能性による pruning ---
+    // R+ を init から開始
+    std::unordered_set<std::string> R;
+    for (auto& f : G.init_pos) R.insert(key_of(f)); // init の positive な事実を R+ に追加
+
+    // R+ の拡張を固定点まで行う
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (const auto& a : G.actions) {
+            bool ok = true;
+            for (const auto& pr : a.pre_pos) {
+                if (!R.count(key_of(pr))) { // pre_pos の全ての要素が R+ に含まれているかチェック
+                    ok = false;
+                    break;
+                }
+            }
+            if (!ok) continue; // もしそのアクションの前提条件が満たされていなかったらスキップ
+            for (const auto& ad : a.eff_add) {
+                if (R.insert(key_of(ad)).second) { // 新しい事実が R+ に追加されたら
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    // R+ で満たせない action を剪定する
+    std::vector<GroundAction> kept;
+    kept.reserve(G.actions.size());
+    for (auto& a : G.actions) {
+        bool ok = true;
+        for (auto& pr : a.pre_pos) {
+            if (!R.count(key_of(pr))) {
+                ok = false;
+                break;
+            }
+        }
+        if (ok) {
+            kept.push_back(std::move(a));
+        } else {
+            G.stats.by_forward++;
+        }
+    }
+    G.actions.swap(kept);
+
+    // --- 後ろ向き関連性による pruning ---
+    // G（有益事実集合）をゴールから開始
+    std::unordered_set<std::string> Gfacts;
+    for (auto& g : G.goal_pos) { // ゴールの positive な事実を G に追加
+        Gfacts.insert(key_of(g));
+    }
+
+    // relevance の固定点計算
+    std::vector<char> relevant(G.actions.size(), 0);
+    bool grown = true; // G が成長したかどうかのフラグ
+    while (grown) {
+        grown = false;
+        for (std::size_t i=0; i<G.actions.size(); ++i) {
+            auto& a = G.actions[i];
+            bool produces_goal = false;
+            for (auto& ad : a.eff_add) {
+                if (Gfacts.count(key_of(ad))) { // add に goal を生み出すものがあるなら
+                    produces_goal = true;
+                    break;
+                }
+            }
+            if (!produces_goal) continue; // ないならスキップ
+            if (!relevant[i]) { // もしそのアクションがまだ relevant でなかったら
+                relevant[i] = 1;
+                grown = true;
+            }
+            for (auto& pr : a.pre_pos) {
+                if (Gfacts.insert(key_of(pr)).second) { // pre を G に追加
+                    grown = true;
+                }
+            }
+        }
+    }
+
+    // relevant==1 のみ残す
+    std::vector<GroundAction> kept2;
+    kept2.reserve(G.actions.size());
+    for (std::size_t i=0; i<G.actions.size(); ++i) {
+        if (relevant[i]) {
+            kept2.push_back(std::move(G.actions[i]));
+        } else {
+            G.stats.by_backward++;
+        }
+    }
+    G.actions.swap(kept2);
 
     return G;
 }

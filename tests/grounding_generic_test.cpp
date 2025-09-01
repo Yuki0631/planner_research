@@ -75,6 +75,14 @@ int main(int argc, char** argv) {
             }
         }
 
+        std::cout << "---- Pruning stats ----\n";
+        std::cout << "Candidates (before pruning): " << G.stats.candidates << "\n";
+        std::cout << "  pruned by typing/all-diff : " << G.stats.by_typing_allDiff << "\n";
+        std::cout << "  pruned by static preds   : " << G.stats.by_static << "\n";
+        std::cout << "  pruned by forward R+     : " << G.stats.by_forward << "\n";
+        std::cout << "  pruned by backward rel   : " << G.stats.by_backward << "\n";
+        std::cout << "Ground actions (final)     : " << G.actions.size() << "\n";
+
         std::cout << "OK\n";
         return 0;
 

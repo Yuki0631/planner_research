@@ -57,6 +57,15 @@ struct GroundTask {
 
     // Ground 化されたアクションを管理するデータ構造 (vector)
     std::vector<GroundAction> actions;
+
+    struct PruneStats {
+        std::size_t candidates = 0;          // 直積で出た総候補
+        std::size_t by_typing_allDiff = 0;   // 型/同一禁止で落とした
+        std::size_t by_static = 0;           // 静的述語で落とした
+        std::size_t by_forward = 0;          // 前向きR+で落とした
+        std::size_t by_backward = 0;         // 後ろ向き関連性で落とした
+    } stats;
+    
 };
 
 // Ground 化を行う関数 (pddl を解析した Domain, Problem から GroundTask を生成する)
