@@ -1,5 +1,9 @@
 {
-    "cmake.sourceDirectory": "/wsl.localhost/Ubuntu/home/yuki_suzuki/planner_not_fd",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/build/compile_commands.json",
+    "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
+    "C_Cpp.default.compilerPath": "/usr/bin/g++",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "cmake.sourceDirectory": "${workspaceFolder}",
     "files.associations": {
         "memory": "cpp",
         "array": "cpp",
