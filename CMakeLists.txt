@@ -36,6 +36,12 @@ add_library(planner_grounding STATIC src/grounding.cpp)
 target_link_libraries(planner_grounding PUBLIC planner_parser)
 target_include_directories(planner_grounding PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
+# strips
+add_library(planner_strips src/strips.cpp)
+target_link_libraries(planner_strips PUBLIC planner_lexer planner_parser planner_grounding)
+target_include_directories(planner_strips PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+
 ## テスト実行ファイル
 # lexer
 add_executable(lexer_pair_test
@@ -57,3 +63,8 @@ target_include_directories(grounding_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
 add_executable(grounding_generic_test tests/grounding_generic_test.cpp)
 target_link_libraries(grounding_generic_test PRIVATE planner_grounding)
 target_include_directories(grounding_generic_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+# strips
+add_executable(strips_test tests/strips_test.cpp)
+target_link_libraries(strips_test PRIVATE planner_strips)
+target_include_directories(strips_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
