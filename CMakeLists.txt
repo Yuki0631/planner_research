@@ -14,6 +14,18 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -O3)
 endif()
 
+# ビルドタイプ別フラグ
+if (CMAKE_BUILD_TYPE STREQUAL "Release")
+  add_compile_options(-O3)
+elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_options(-O0 -g -fno-omit-frame-pointer)
+  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    # コンパイルとリンクの両方にサニタイザを渡す（引数は分けて書く）
+    add_compile_options(-fsanitize=address -fsanitize=undefined)
+    add_link_options(   -fsanitize=address -fsanitize=undefined)
+  endif()
+endif()
+
 # --- ライブラリ ---
 # ヘッダ
 include_directories(${CMAKE_SOURCE_DIR}/include)
