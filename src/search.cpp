@@ -42,7 +42,7 @@ std::string plan_to_string(const StripsTask& st, const std::vector<int>& plan) {
 
 // cost がすべて整数かどうかを判定する関数
 bool all_action_costs_are_integers(const planner::StripsTask& st,
-                                          double eps = 1e-9)
+                                          double eps)
 {
     for (const auto& a : st.actions) {
         // Nan や inf 対策
