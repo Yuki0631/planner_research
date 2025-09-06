@@ -104,6 +104,12 @@ int main(int argc, char** argv) {
         // 簡単に要約を出力する
         std::cout << "=== Summary ===\n"
                   << "Parse Time: " << parse_time << " ms\n"
+                  << "Candidates (before pruning): " << G.stats.candidates << "\n"
+                  << "  pruned by typing/all-diff : " << G.stats.by_typing_allDiff << "\n"
+                  << "  pruned by static preds   : " << G.stats.by_static << "\n"
+                  << "  pruned by forward R+     : " << G.stats.by_forward << "\n"
+                  << "  pruned by backward rel   : " << G.stats.by_backward << "\n"
+                  << "Ground actions (final)     : " << G.actions.size() << "\n"
                   << "Ground Time: " << ground_time << " ms\n"
                   << "Strips Time: " << strips_time << " ms\n"
                   << "Objects: " << G.objects.size()
