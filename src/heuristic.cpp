@@ -11,8 +11,8 @@ HeuristicFn make_blind() {
 
 // 違反ゴール数を数えるヒューリスティック関数
 HeuristicFn make_goalcount() {
-    return [](const StripsTask& st, const StripsState& s) -> double {
-        double h = 0.0; // 違反ゴール数
+    return [](const StripsTask& st, const StripsState& s) -> int {
+        int h = 0; // 違反ゴール数
 
         // ゴール条件で true なはずなのに false なものを数える
         for (int f : st.goal_pos) {
