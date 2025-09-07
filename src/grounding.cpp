@@ -382,16 +382,16 @@ GroundTask ground(const Domain& d, const Problem& p)
             G.stats.candidates++; // 候補カウント
 
             // --- all-different による早期チェック ---
-            if (act.params.size() > 1) {
-                std::unordered_set<std::string> seen;
-                for (auto& tv : act.params) {
-                    const std::string& obj = sigma.at(tv.name);
-                    if (!seen.insert(obj).second) { // すでに出た object ならば 
-                        G.stats.by_typing_allDiff++;
-                        return; 
-                    }
-                }
-            }
+            //if (act.params.size() > 1) {
+            //    std::unordered_set<std::string> seen;
+            //    for (auto& tv : act.params) {
+            //        const std::string& obj = sigma.at(tv.name);
+            //        if (!seen.insert(obj).second) { // すでに出た object ならば 
+            //            G.stats.by_typing_allDiff++;
+            //            return; 
+            //        }
+            //    }
+            //}
 
             // --- 静的述語の早期チェック ---
             auto is_static_atom = [&](const Atom& a)->bool {
