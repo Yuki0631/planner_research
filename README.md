@@ -19,10 +19,12 @@ Some search algorithms and heuristic functions will be added later. <br>
     cd build
     cmake .. && cmake --build . -j
     ```
+
 <br>
 4. Execute the project in your build directory. <br>
 
     ```{bash}
     ./planner_not_fd <domain.pddl> <problem.pddl> [--algo astar] "<< "[--h blind|goalcount|wgoalcount W] [--plan-dir <DIR>]
     ```
+
 <br>
