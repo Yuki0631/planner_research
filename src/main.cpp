@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstdlib>
 #include <chrono>
+#include <filesystem>
 
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -29,7 +30,7 @@ static std::string slurp(const std::string& path) {
 static void print_usage(const char* argv0) {
     std::cerr
       << "Usage:\n"
-      << "  " << argv0 << " <domain.pddl> <problem.pddl> [--algo astar] [--h blind|goalcount|wgoalcount W]\n"
+      << "  " << argv0 << " <domain.pddl> <problem.pddl> [--algo astar] "<< "[--h blind|goalcount|wgoalcount W] [--plan-dir <DIR>]\n"
       << "Examples:\n"
       << "  " << argv0 << " domain.pddl problem.pddl --algo astar --h goalcount\n"
       << "  " << argv0 << " domain.pddl problem.pddl --algo astar --h wgoalcount 2.0\n";
@@ -48,6 +49,7 @@ int main(int argc, char** argv) {
         std::string algo = "astar";
         std::string hname = "goalcount";
         double w = 1.0;
+        std::string plan_dir; // plan を出力するディレクトリ
 
         for (int i=3; i<argc; ++i) {
             std::string a = argv[i];
@@ -58,11 +60,15 @@ int main(int argc, char** argv) {
             if (a == "--h" && i+1 < argc) { // heuristic function を指定する引数の場合
                 hname = argv[++i];
                 if (hname == "wgoalcount") { // w を指定する weighted heuristic function の場合
-                    if (i+1 >= argc) { // w を指定する引数がない場合 (index が追い付いてしまった場合)
+                    if (i+1 >= (argc - 2)) { // w を指定する引数がない場合 (index の位置が追い越してしまった場合)
                         throw std::runtime_error("--h wgoalcount needs a weight");
                     }
                     w = std::stod(argv[++i]);
                 }
+                continue;
+            }
+            if (a == "--plan-dir" && i+1 < argc) {
+                plan_dir = argv[++i];
                 continue;
             }
             if (a == "--help" || a == "-h") { //　使用法を確認したい場合
@@ -149,6 +155,26 @@ int main(int argc, char** argv) {
             std::cout << "Plan length: " << res.plan.size()
                       << ", Cost: " << res.plan_cost << "\n";
             std::cout << "\nPlan:\n" << plan_to_string(ST, res.plan) << "\n";
+
+            if (!plan_dir.empty()) { // plan が空でないのなら
+                std::error_code ec;
+                std::filesystem::create_directories(plan_dir, ec); // ディレクトリがある場合はエラーが発生するがそのまま続行
+
+                // 問題ファイル名から拡張子を除いた stem を使って <stem>.plan を作る
+                std::filesystem::path prb(prb_path);
+                std::string stem = prb.stem().string();
+                std::filesystem::path out = std::filesystem::path(plan_dir) / (stem + ".plan");
+
+                std::ofstream ofs(out);
+                if (!ofs) { // 出力ができなかった場合
+                    std::cerr << "[warn] cannot write plan file: " << out.string() << "\n";
+                } else {
+                    ofs << plan_to_val(ST, res.plan); // VAL 変換して出力
+                    ofs.close();
+                    std::cout << "Wrote VAL plan: " << out.string() << "\n";
+                    std::cout << "Validate with: validate " << dom_path << " " << prb_path << " " << out.string() << "\n";
+                }
+            }
         }
         return res.solved ? 0 : 2;
 

@@ -61,5 +61,7 @@ bool all_action_costs_are_integers(const planner::StripsTask& st, double eps = 1
 // f 値を丸める関数
 int rounding(double v);
 
+// 探索結果を VAL で検証できるように変換する関数
+std::string plan_to_val(const StripsTask& st, const std::vector<int>& plan);
 
 } // namespace planner

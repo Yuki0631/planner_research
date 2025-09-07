@@ -2,6 +2,7 @@
 #include "bucket_pq.hpp"
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <queue>
 #include <unordered_map>
 #include <unordered_set>
@@ -37,6 +38,18 @@ std::string plan_to_string(const StripsTask& st, const std::vector<int>& plan) {
         int a = plan[i];
         oss << i << ": " << st.actions[a].name << " [cost=" << st.actions[a].cost << "]";
     }
+    return oss.str();
+}
+
+std::string plan_to_val(const StripsTask& st, const std::vector<int>& plan) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < plan.size(); ++i) {
+        if (i) oss << "\n"; // 改行
+        int a = plan[i];
+        oss << st.actions[a].name; // action name を書き込む
+    }
+    double c = eval_plan_cost(st, plan);
+    oss << "\n; cost = " << std::setprecision(17) << c << "\n";
     return oss.str();
 }
 
