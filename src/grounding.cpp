@@ -435,12 +435,12 @@ GroundTask ground(const Domain& d, const Problem& p)
                 std::ostringstream nm;
                 nm << act.name;
                 if (!act.params.empty()) {
-                    nm << "[";
+                    nm << "(";
                     for (size_t i=0;i<act.params.size();++i) {
                         if (i) nm << ",";
                         nm << sigma.at(act.params[i].name);
                     }
-                    nm << "]";
+                    nm << ")";
                 }
                 ga.name = nm.str();
             }
