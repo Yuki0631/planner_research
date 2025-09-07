@@ -90,10 +90,16 @@ StripsTask compile_to_strips(const GroundTask& gt) {
 
     // actions
     st.actions.reserve(gt.actions.size());
+
+    bool any_costful = false; // domain にコストが付いているかどうか表すフラグ
+    for (const auto& ga2 : gt.actions) {
+        if (ga2.cost != 0.0) { any_costful = true; break; }
+    }
+
     for (auto& ga : gt.actions) { // Ground Task に含まれる各 Action に対して
         StripsAction a; // STIRPS Action
         a.name = ga.name;
-        a.cost = (ga.cost > 0.0 ? ga.cost : 1.0); // ga.cost に 値がある場合以外は、 1.0 にデフォルトで設定しておく
+        a.cost = (any_costful ? ga.cost : 1.0); // ga.cost に 値がある場合以外は、 1.0 にデフォルトで設定しておく
 
         a.pre_pos.reserve(ga.pre_pos.size()); // サイズの確保
         for (auto& f : ga.pre_pos) a.pre_pos.push_back(st.fid[key_of(f)]); // id を順に入れていく
