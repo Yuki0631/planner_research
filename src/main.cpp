@@ -143,13 +143,26 @@ int main(int argc, char** argv) {
             throw std::runtime_error("unknown algo: " + algo);
         }
 
-        // --- Report ---
-        std::cout << "\n== Search Result ==\n";
-        std::cout << "Solved: " << (res.solved ? "YES" : "NO") << "\n";
-        std::cout << "Search Time: " << search_time << " ms\n";
-        std::cout << "Generated: " << res.stats.generated
-                  << ", Expanded: " << res.stats.expanded
-                  << ", Duplicates: " << res.stats.duplicates << "\n";
+        // --- Report (FD-compatible) ---
+        std::cout.setf(std::ios::fixed);
+        std::cout.precision(3);
+
+        double search_time_s = search_time / 1000.0;
+        double total_time_s  = (parse_time + ground_time + strips_time) / 1000.0 + search_time_s;
+
+        if (res.solved) {
+            std::cout << "Solution found." << std::endl;
+            std::cout << "Plan length: " << res.plan.size() << " step(s)." << std::endl;
+            std::cout << "Plan cost: "   << res.plan_cost << "." << std::endl;
+        } else {
+            std::cout << "Completely explored state space — no solution!" << std::endl;
+        }
+
+        // FD 互換の統計行
+        std::cout << "Expanded "  << res.stats.expanded  << " state(s)." << std::endl;
+        std::cout << "Generated " << res.stats.generated << " state(s)." << std::endl;
+        std::cout << "Search time: " << search_time_s << "s" << std::endl;
+        std::cout << "Total time: "  << total_time_s  << "s" << std::endl;
 
         if (res.solved) {
             std::cout << "Plan length: " << res.plan.size()
@@ -176,7 +189,39 @@ int main(int argc, char** argv) {
                 }
             }
         }
-        return res.solved ? 0 : 2;
+
+        if (res.solved) {
+            // 出力先ディレクトリ 指定がなければカレントディレクトリ
+            std::filesystem::path outdir = plan_dir.empty() ? std::filesystem::current_path() : std::filesystem::path(plan_dir);
+            std::error_code ec;
+            std::filesystem::create_directories(outdir, ec);
+
+            // 既存の sas_plan, sas_plan.1, ... を避けて連番にする
+            std::filesystem::path plan_path = outdir / "sas_plan";
+            int idx = 0;
+            while (std::filesystem::exists(plan_path)) {
+                ++idx;
+                plan_path = outdir / ("sas_plan." + std::to_string(idx));
+            }
+
+            std::ofstream ofs(plan_path);
+            if (!ofs) {
+                std::cerr << "[warn] cannot write plan file: " << plan_path.string() << std::endl;
+            } else {
+                ofs << plan_to_val(ST, res.plan);
+                // 末尾にメタ情報を追加する
+                ofs << "; cost = "   << res.plan_cost     << "\n";
+                ofs << "; length = " << res.plan.size()   << "\n";
+                ofs.close();
+
+                std::cout << "Wrote plan to: " << plan_path.string() << std::endl;
+            }
+        }
+        int exit_code = 0;
+        if (!res.solved) {
+            exit_code = 1; // 解なし（探索完了）を 1 に
+        }
+        return exit_code;
 
     } catch (const LexerError& e) { // PDDL 自体が間違えている場合
         std::cerr << "[lexer] " << e.what() << "\n";
