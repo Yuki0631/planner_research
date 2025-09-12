@@ -4,27 +4,11 @@ project(planner_not_fd CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Build type default
-if (NOT CMAKE_BUILD_TYPE)
-  set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
 endif()
 
-# 共通警告と最適化
-if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -O3)
-endif()
-
-# ビルドタイプ別フラグ
-if (CMAKE_BUILD_TYPE STREQUAL "Release")
-  add_compile_options(-O3)
-elseif (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  add_compile_options(-O0 -g -fno-omit-frame-pointer)
-  if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    # コンパイルとリンクの両方にサニタイザを渡す（引数は分けて書く）
-    add_compile_options(-fsanitize=address -fsanitize=undefined)
-    add_link_options(   -fsanitize=address -fsanitize=undefined)
-  endif()
-endif()
+add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wconversion -O3 -march=native)
 
 # --- ライブラリ ---
 # ヘッダ
