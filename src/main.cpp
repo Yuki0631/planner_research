@@ -165,32 +165,6 @@ int main(int argc, char** argv) {
         std::cout << "Total time: "  << total_time_s  << "s" << std::endl;
 
         if (res.solved) {
-            std::cout << "Plan length: " << res.plan.size()
-                      << ", Cost: " << res.plan_cost << "\n";
-            std::cout << "\nPlan:\n" << plan_to_string(ST, res.plan) << "\n";
-
-            if (!plan_dir.empty()) { // plan が空でないのなら
-                std::error_code ec;
-                std::filesystem::create_directories(plan_dir, ec); // ディレクトリがある場合はエラーが発生するがそのまま続行
-
-                // 問題ファイル名から拡張子を除いた stem を使って <stem>.plan を作る
-                std::filesystem::path prb(prb_path);
-                std::string stem = prb.stem().string();
-                std::filesystem::path out = std::filesystem::path(plan_dir) / (stem + ".plan");
-
-                std::ofstream ofs(out);
-                if (!ofs) { // 出力ができなかった場合
-                    std::cerr << "[warn] cannot write plan file: " << out.string() << "\n";
-                } else {
-                    ofs << plan_to_val(ST, res.plan); // VAL 変換して出力
-                    ofs.close();
-                    std::cout << "Wrote VAL plan: " << out.string() << "\n";
-                    std::cout << "Validate with: validate " << dom_path << " " << prb_path << " " << out.string() << "\n";
-                }
-            }
-        }
-
-        if (res.solved) {
             // 出力先ディレクトリ 指定がなければカレントディレクトリ
             std::filesystem::path outdir = plan_dir.empty() ? std::filesystem::current_path() : std::filesystem::path(plan_dir);
             std::error_code ec;
