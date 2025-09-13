@@ -117,7 +117,7 @@ Token Lexer::readNameLike() {
             errorHere("Expected keyword after ':'");
         std::string k;
         while (!eof() && isNameChar(cur())) {
-            k.push_back(cur());
+            k.push_back(std::tolower((unsigned char)cur()));
             advance();
         }
         return Token{TokenType::KEYWORD, k, start};
@@ -140,7 +140,7 @@ Token Lexer::readNameLike() {
     if (!eof() && isNameStart(cur())) {
         std::string n;
         while (!eof() && isNameChar(cur())) {
-            n.push_back(cur());
+            n.push_back(std::tolower((unsigned char)cur()));
             advance();
         }
         // 単独の "-" を NAME と誤判定しないよう補正
