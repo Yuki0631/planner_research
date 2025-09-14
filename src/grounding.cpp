@@ -266,6 +266,15 @@ GroundTask ground(const Domain& d, const Problem& p)
 {
     GroundTask G;
 
+    for (auto& [name, ty] :d.constants) {
+        // 重複がある場合はエラーを吐く
+        if (G.obj_id.count(name)) throw std::runtime_error("duplicate object: " + name);
+        int id = static_cast<int>(G.objects.size());
+        G.objects.push_back(name); // オブジェクト名を登録
+        G.obj_id[name] = id; // object -> id
+        G.obj_ty[name] = ty; // object -> type
+    }
+
     // problem の objects の名前と型を登録する
     for (auto& [name, ty] : p.objects) {
         if (G.obj_id.count(name)) throw std::runtime_error("duplicate object: " + name);
