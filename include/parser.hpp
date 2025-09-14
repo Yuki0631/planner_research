@@ -91,6 +91,7 @@ struct Domain {
     std::vector<FunctionSchema> functions;
     std::vector<Action> actions;
     std::unordered_map<std::string, std::vector<std::string>> supertypes; // type の 下位から上位へのマップ (複数の親を許容)
+    std::vector<std::pair<std::string, std::string>> constants; // 型付き定数保存用のベクトル, <name, type>
 };
 
 // 初期化に数値が含まれる場合用の struct
@@ -146,6 +147,7 @@ private:
     std::vector<PredicateSchema> parsePredicatesSection(); // 'predicates' の後ろ
     std::vector<FunctionSchema> parseFunctionsSection(); // function 用の追加関数
     Action parseActionSection(); // :action ～ の塊
+    std::vector<std::pair<std::string, std::string>> parseConstantsSection(); // :constants の後ろ
 
     // Problemセクション
     std::vector<std::pair<std::string,std::string>> parseObjectsSection(); // objects
