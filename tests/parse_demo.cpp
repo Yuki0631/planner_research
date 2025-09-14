@@ -30,6 +30,8 @@ int main(int argc, char** argv){
             for (auto& r : D.requirements) std::cout << ":" << r << " ";
             std::cout << "\n  types: ";
             for (auto& t : D.types) std::cout << t << " ";
+            std::cout << "\n  constants: ";
+            for (auto& c : D.constants) std::cout << c.first << " - " << c.second << " ";
             std::cout << "\n  predicates:\n";
             for (auto& pr : D.predicates) {
                 std::cout << "    " << pr.name << "(";
