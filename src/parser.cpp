@@ -421,6 +421,29 @@ Action Parser::parseActionSection(){
     return a;
 }
 
+// 型付定数の解析
+std::vector<std::pair<std::string,std::string>> Parser::parseConstantsSection(){
+    std::vector<std::pair<std::string,std::string>> cs; // 定数と型を保存するベクトル, <name, type>
+    std::vector<std::string> buf; // NAME 一時保存用のバッファ
+
+    while (lex_.peek().type != TokenType::RPAR) { // 右括弧に到達するまで
+        auto t = lex_.next();
+        if (t.type == TokenType::NAME) {
+            buf.push_back(t.lexeme);
+        } else if (t.type == TokenType::DASH) {
+            std::string ty = expectName("type name after '-'");
+            for (auto& n : buf) cs.push_back({n, ty});
+            buf.clear(); // バッファの解放
+        } else {
+            throw std::runtime_error("NAME or '-' expected in :constants");
+        }
+    }
+    lex_.expect(TokenType::RPAR, ")");
+    // 最後に残ったものは, object 型とする
+    for (auto& n : buf) cs.push_back({n, "object"});
+    return cs;
+}
+
 // ドメインの解析
 Domain Parser::parseDomain(){
     Domain d;
@@ -473,6 +496,12 @@ Domain Parser::parseDomain(){
             Action a = parseActionSection();
             lex_.expect(TokenType::RPAR, ")"); // :action ブロックの ')'
             d.actions.push_back(std::move(a));
+            continue;
+        }
+
+        // :constants
+        if (kw == "constants") {
+            d.constants = parseConstantsSection();
             continue;
         }
 
