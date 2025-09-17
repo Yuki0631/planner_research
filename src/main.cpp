@@ -33,7 +33,7 @@ static void print_usage(const char* argv0) {
       << "  " << argv0 << " <domain.pddl> <problem.pddl> [--algo astar] "<< "[--h blind|goalcount|wgoalcount W] [--plan-dir <DIR>]\n"
       << "Examples:\n"
       << "  " << argv0 << " domain.pddl problem.pddl --algo astar --h goalcount --plan-dir directory\n"
-      << "  " << argv0 << " domain.pddl problem.pddl --algo astar --h wgoalcount 2.0b --plan-dir directory\n";
+      << "  " << argv0 << " domain.pddl problem.pddl --algo astar --h wgoalcount 2.0 --plan-dir directory\n";
 }
 
 int main(int argc, char** argv) {
