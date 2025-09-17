@@ -552,6 +552,33 @@ void Parser::parseInitSectionInto(Problem& p) {
         lex_.expect(TokenType::LPAR, "(");
         auto head = lex_.next();
 
+        // (and ...) の場合
+        if (head.type == TokenType::NAME && head.lexeme == "and") {
+            while (lex_.peek().type != TokenType::RPAR) {
+                lex_.expect(TokenType::LPAR, "(");
+                auto h2 = lex_.next();
+                // (= <func-term> <number>) の場合
+                if (h2.type == TokenType::NAME && h2.lexeme == "=") {
+                    NumericInit ni;
+                    ni.lhs = parseFuncTermInParens();
+                    NumExpr rhs = parseNumericExpr();
+                    if (rhs.kind != NumExpr::CONST) {
+                        throw std::runtime_error("RHS of numeric init must be a number");
+                    }
+                    ni.value = rhs.value;
+                    lex_.expect(TokenType::RPAR, ")");
+                    p.init_num.push_back(std::move(ni));
+                } else if (h2.type  == TokenType::NAME) { // 命題の場合
+                    Atom a = parseAtomWithHead(h2.lexeme);
+                    p.init.push_back(std::move(a));
+                } else {
+                    throw std::runtime_error("invalid init item head");
+                }
+            }
+            lex_.expect(TokenType::RPAR, ")");
+            continue;
+        }
+
         // (= <func-term> <number>) の場合
         if (head.type == TokenType::NAME && head.lexeme == "=") {
             NumericInit ni;
