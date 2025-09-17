@@ -166,10 +166,10 @@ static GroundAtom ground_atom(const Atom& a,
         const std::string& obj = a.args[i];
         auto oit = obj_id.find(obj); // object id
         if (oit == obj_id.end()) // object が見つからなかった場合はエラー
-            throw std::runtime_error("unknown object: " + obj);
+            throw std::runtime_error("unknown object: " + obj + " (in " + a.pred + " arg#" + std::to_string(i) + ")");
         // 型チェック（述語パラメータ型に対して）
         if (!object_fits_type(d, obj_ty, obj, ps.params[i].type))
-            throw std::runtime_error("object type mismatch for " + obj + " in " + a.pred);
+            throw std::runtime_error("type mismatch: " + obj + " :: " + obj_ty.at(obj) +" !<= " + ps.params[i].type + " (in " + a.pred + " arg#" + std::to_string(i) + ")");
         ga.args.push_back(oit->second);
     }
     return ga;
