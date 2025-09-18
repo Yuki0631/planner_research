@@ -111,7 +111,7 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
         meta.reserve(1 << 10);
 
         // OPEN リスト: pack_fh_asc(f,h) をキー、値はノード id
-        BucketPQ open;
+        TwoLevelBucketPQ open;
 
         // 初期ノードの登録
         const int h0 = rounding(h(st, s0)); 
