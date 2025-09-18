@@ -5,6 +5,10 @@
 #include <new>
 #include <utility>
 #include <cassert>
+#include <unordered_map>
+#include <queue>
+#include <vector>
+#include <functional>
 
 using UKey = uint32_t; 
 static constexpr int  H_BITS = 16; // 32bit の半分の 16bit
@@ -385,5 +389,347 @@ private:
         if (new_key < min_key_) min_key_ = new_key;
         // min_key_ がない場合
         if (buckets_[static_cast<u_int32_t>(min_key_)].empty()) advance_min_();
+    }
+};
+
+// --- Two-level Bucket Priority Queue ---
+class TwoLevelBucketPQ {
+public:
+    using Value = u_int32_t;
+    using Key   = UKey;
+
+    TwoLevelBucketPQ() : count_(0) {}
+
+    // empty 関数
+    bool empty() const noexcept { return count_ == 0; }
+
+    // 総要素数を返す関数
+    u_int32_t size() const noexcept { return count_; }
+
+    // value (node id) に Key (f, h pack) を設定して挿入する関数
+    void insert(Value v, Key k) {
+        ensure_pos_(v);
+
+        Pos &p = pos_[v];
+        assert(!p.present && "insert: value already present");
+
+        const u_int32_t f = static_cast<u_int32_t>(unpack_f(k));
+        const u_int32_t h = static_cast<u_int32_t>(unpack_h(k));
+
+        ensure_f_(f);
+        ensure_h_(f, h);
+
+        auto &bucket = layers_[f].buckets[h];
+        p.present = true;
+        p.f = f;
+        p.h = h;
+        p.idx = bucket.size();
+        bucket.push_back(v);
+
+        // ビット更新
+        if (!layers_[f].hbits.test(h)) {
+            layers_[f].hbits.set(h);
+        }
+        if (!fbits_.test(f)) {
+            fbits_.set(f);
+        }
+        ++count_;
+    }
+
+    // 最小キー（最小 f、同値時は最小 h）を 1 つ取り出す関数、戻り値は (Value, Key)
+    std::pair<Value, Key> extract_min() {
+        assert(count_ > 0);
+
+        const int f = fbits_.find_first();
+        assert(f >= 0);
+
+        HLayer &L = layers_[static_cast<u_int32_t>(f)];
+
+        const int h = L.hbits.find_first();
+        assert(h >= 0);
+
+        auto &bucket = L.buckets[static_cast<u_int32_t>(h)];
+        const u_int32_t last = bucket.size() - 1;
+
+        Value v = bucket[last];
+        bucket.pop_back();
+
+        Pos &p = pos_[v];
+        p.present = false;
+        --count_;
+
+        // その h バケットが空になった該当の bit を 0 にする
+        if (bucket.empty()) {
+            L.hbits.clear(static_cast<u_int32_t>(h));
+
+            // その f 層が空になったら該当の bit を 0 にする
+            if (!L.hbits.any()) {
+                fbits_.clear(static_cast<u_int32_t>(f));
+            }
+        }
+
+        // 返す Key は (f<<H_BITS)|h_encoded
+        Key k = (static_cast<Key>(f) << H_BITS) | (static_cast<Key>(h) & H_MASK);
+        return {v, k};
+    }
+
+    // decrease_key
+    void decrease_key(Value v, Key new_key) {
+        change_key_(v, new_key, false);
+    }
+
+    // increase_key
+    void increase_key(Value v, Key new_key) {
+        change_key_(v, new_key, true);
+    }
+
+    // 該当ノードが存在するかどうか
+    bool contains(Value v) const {
+        return v < pos_.size() && pos_[v].present;
+    }
+
+    // 値 v を削除する関数
+    void remove(Value v) {
+        if (!contains(v)) return;
+        Pos &p = pos_[v];
+        HLayer &L = layers_[p.f];
+        auto &bucket = L.buckets[p.h];
+
+        const u_int32_t last = bucket.size() - 1;
+        if (p.idx != last) {
+            Value moved = bucket[last];
+            bucket[p.idx] = moved;
+            pos_[moved].idx = p.idx;
+        }
+        bucket.pop_back();
+
+        if (bucket.empty()) { // h バケットが空になった場合
+            L.hbits.clear(p.h);
+            if (!L.hbits.any()) { // f バケットが空になった場合
+                fbits_.clear(p.f);
+            }
+        }
+        p.present = false;
+        --count_;
+    }
+
+    // 現在の Key を返す関数
+    Key key_of(Value v) const {
+        if (!contains(v)) return Key(UINT32_MAX);
+
+        const Pos &p = pos_[v];
+        return (static_cast<Key>(p.f) << H_BITS) | (static_cast<Key>(p.h) & H_MASK);
+    }
+
+    // clear() 関数
+    void clear() {
+        for (u_int32_t f = 0; f < layers_.size(); ++f) {
+            auto &L = layers_[f];
+            for (u_int32_t h = 0; h < L.buckets.size(); ++h) {
+                L.buckets[h].clear();
+            }
+            L.buckets.clear();
+            L.hbits.clear_all();
+        }
+
+        layers_.clear();
+
+        for (u_int32_t i = 0; i < pos_.size(); ++i) pos_[i] = Pos{};
+
+        pos_.clear();
+
+        fbits_.clear_all();
+        
+        count_ = 0;
+    }
+
+private:
+    // ビットセット
+    struct Bitset {
+        DynamicArray<uint64_t> w_; // 64bit ワード列
+        u_int32_t min_word_ = UINT32_MAX; // 追跡変数
+
+        // 追跡変数が初期値じゃないか確認する関数 (要素があるかどうか)
+        bool any() const noexcept { return min_word_ != UINT32_MAX; }
+
+        // そのインデックスの位置が真 (1) であるか確認する関数
+        bool test(u_int32_t i) const noexcept {
+            const u_int32_t wi = i >> 6; // どのワードか
+            const u_int32_t bi = i & 63; // そのワードのどのビットか
+            if (wi >= w_.size()) return false;
+            return (w_[wi] >> bi) & 1ull;
+        }
+
+        // そのインデックスの bit を 1 にする関数
+        void set(u_int32_t i) {
+            const u_int32_t wi = i >> 6;
+            const u_int32_t bi = i & 63;
+
+            if (wi >= w_.size()) w_.resize(wi + 1);
+
+            uint64_t &word = w_[wi];
+            const uint64_t before = word;
+            word |= (1ull << bi);
+
+            if (before == 0 && (wi < min_word_)) min_word_ = wi;
+            if (min_word_ == UINT32_MAX) min_word_ = wi;
+        }
+
+        // そのインデックスの bit を 0 にする関数
+        void clear(u_int32_t i) {
+            const u_int32_t wi = i >> 6;
+            const u_int32_t bi = i & 63;
+
+            if (wi >= w_.size()) return;
+
+            uint64_t &word = w_[wi];
+            word &= ~(1ull << bi);
+
+            // 次の非ゼロワードへ前倒しする
+            if (word == 0 && wi == min_word_) {
+                advance_min_word_();
+            }
+        }
+
+        // 最小 set ビットの “全体 index” を返す関数、なければ -1 を返す
+        int find_first() const {
+            if (min_word_ == UINT32_MAX) return -1;
+
+            const u_int32_t wi = min_word_;
+            const uint64_t word = w_[wi];
+            assert(word != 0);
+
+            const int bit = __builtin_ctzll(word); // 下位何 bit まで 0 が続いているかを返す CPU 命令
+            return static_cast<int>((wi << 6) + bit);
+        }
+
+        // ワード列をすべて 0 にする関数
+        void clear_all() {
+            for (u_int32_t i = 0; i < w_.size(); ++i) w_[i] = 0;
+            w_.clear();
+            min_word_ = UINT32_MAX;
+        }
+
+        // 指定 index に対応するワードが存在するよう拡張する関数
+        void ensure_word_for_index(u_int32_t i) {
+            const u_int32_t wi = i >> 6;
+            if (wi >= w_.size()) w_.resize(wi + 1);
+        }
+
+    private:
+        void advance_min_word_() {
+            if (w_.empty()) {
+                min_word_ = UINT32_MAX;
+                return;
+            }
+
+            u_int32_t wi = min_word_;
+            const u_int32_t n = w_.size();
+
+            while (wi < n && w_[wi] == 0) ++wi; // 0 でないワードの要素を順に探していく
+            min_word_ = (wi < n) ? wi : UINT32_MAX;
+        }
+    };
+
+    // Position Structure
+    struct Pos {
+        u_int32_t f = 0;
+        u_int32_t h = 0;
+        u_int32_t idx = 0;
+        bool present = false;
+    };
+
+    // h 値用の Structure
+    struct HLayer {
+        DynamicArray< DynamicArray<Value> > buckets; // buckets[h] = [values...]
+        Bitset hbits; // 非空 h をビットで管理
+
+        // h のバケット容量を確保する関数
+        void ensure_h(u_int32_t h) {
+            if (h >= buckets.size()) buckets.resize(h + 1);
+            hbits.ensure_word_for_index(h);
+        }
+    };
+
+    // f 値の配列 (各要素は h 層)
+    DynamicArray<HLayer> layers_;
+
+    // 非空 f をビットで管理
+    Bitset fbits_;
+
+    // pos_[value]
+    DynamicArray<Pos> pos_;
+
+    // 総要素数
+    u_int32_t count_;
+
+    // 容量確保系の関数群
+    // Position
+    void ensure_pos_(u_int32_t v) {
+        if (v >= pos_.size()) pos_.resize(v + 1);
+    }
+
+    // f Layer
+    void ensure_f_(u_int32_t f) {
+        if (f >= layers_.size()) layers_.resize(f + 1);
+        fbits_.ensure_word_for_index(f);
+    }
+
+    // h Layer
+    void ensure_h_(u_int32_t f, u_int32_t h) {
+        layers_[f].ensure_h(h);
+    }
+
+    // Key の値を変更する関数
+    void change_key_(Value v, Key new_key, bool allow_increase) {
+        assert(contains(v) && "change_key_: value not present");
+
+        const u_int32_t nf = static_cast<u_int32_t>(unpack_f(new_key));
+        const u_int32_t nh = static_cast<u_int32_t>(unpack_h(new_key));
+
+        Pos &p = pos_[v];
+
+        // 前の key と比較する
+        if (!allow_increase) {
+            const UKey old_k = (static_cast<UKey>(p.f) << H_BITS) | (static_cast<UKey>(p.h) & H_MASK);
+            assert(new_key <= old_k && "decrease_key: new_key must be <= old");
+        }
+        if (nf == p.f && nh == p.h) return; // 変更がない場合
+
+        // 前のバケットから除去
+        {
+            HLayer &Lold = layers_[p.f];
+            auto &bold = Lold.buckets[p.h];
+
+            const u_int32_t last = bold.size() - 1;
+
+            if (p.idx != last) {
+                Value moved = bold[last];
+                bold[p.idx] = moved;
+                pos_[moved].idx = p.idx;
+            }
+
+            bold.pop_back();
+
+            if (bold.empty()) {
+                Lold.hbits.clear(p.h);
+                if (!Lold.hbits.any()) fbits_.clear(p.f);
+            }
+        }
+
+        // 新バケットへ挿入
+        ensure_f_(nf);
+        ensure_h_(nf, nh);
+
+        HLayer &Lnew = layers_[nf];
+        auto &bnew = Lnew.buckets[nh];
+
+        p.f = nf;
+        p.h = nh;
+        p.idx = bnew.size();
+        bnew.push_back(v);
+
+        if (!Lnew.hbits.test(nh)) Lnew.hbits.set(nh);
+        if (!fbits_.test(nf)) fbits_.set(nf);
     }
 };
