@@ -152,15 +152,15 @@ int main(int argc, char** argv) {
 
         if (res.solved) {
             std::cout << "Solution found." << std::endl;
-            std::cout << "Plan length: " << res.plan.size() << " step(s)." << std::endl;
-            std::cout << "Plan cost: "   << res.plan_cost << "." << std::endl;
+            std::cout << "Plan length: " << res.plan.size() << " step(s)" << std::endl;
+            std::cout << "Plan cost: "   << res.plan_cost << std::endl;
         } else {
             std::cout << "Completely explored state space — no solution!" << std::endl;
         }
 
         // FD 互換の統計行
-        std::cout << "Expanded "  << res.stats.expanded  << " state(s)." << std::endl;
-        std::cout << "Generated " << res.stats.generated << " state(s)." << std::endl;
+        std::cout << "Expanded "  << res.stats.expanded  << " state(s)" << std::endl;
+        std::cout << "Generated " << res.stats.generated << " state(s)" << std::endl;
         std::cout << "Search time: " << search_time_s << "s" << std::endl;
         std::cout << "Total time: "  << total_time_s  << "s" << std::endl;
 
