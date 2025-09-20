@@ -4,8 +4,12 @@
 #include <algorithm>
 #include <cmath>
 #include <unordered_set>
+#include <limits>
+
 
 namespace planner {
+
+/* 以前使っていた int Key を用いた Fact Key
 // --- より高速な事実に対する整数キーの Structure ---
 struct FactKey{
     int pred;
@@ -24,6 +28,51 @@ struct FactKeyHash {
         return h;
     }
 };
+*/
+
+// --- Fact Key の 64bit パック ---
+// pred(16bit) + arg1(16bit) + arg2(16bit) + arg3(16bit)
+// 引数が 4 以上、または 16bit に収まらない ID が含まれる場合は、フォールバックの 64bit ミックスハッシュを使用する
+
+// 16bit に収まるかどうか確認する関数
+static inline bool ids_fit_u16(const std::vector<int>& ids) {
+    for (int v : ids) {
+        if (v < 0 || v > std::numeric_limits<uint16_t>::max()) {
+            return false;
+        }
+    }
+}
+
+// predicate と arguments を 64bit にパックする関数
+static inline uint64_t pack16_pred_args3(int pred, const std::vector<int>& args) {
+    uint64_t x = static_cast<uint16_t>(pred) & 0xFFFFu;
+    const int n = std::min<int>(3, static_cast<int>(args.size()));
+    for (int i = 0; i < n; ++i) {
+        x |= (static_cast<uint64_t>(static_cast<uint16_t>(args[i]) & 0xFFFFu) << (16u * (i + 1)));
+    }
+    return x;
+}
+
+// pred と arguments の id を受け取り 64bit ハッシュ値として返す関数
+static inline uint64_t mix64_from_ids(int pred, const std::vector<int> &args) {
+    uint64_t h = static_cast<uint64_t>(std::hash<int>{}(pred));
+    for (int v : args) {
+        uint64_t hv = static_cast<uint64_t>(std::hash<int>{}(v));
+        h ^= hv +  0x9e3779b97f4a7c15ull + (h << 6) + (h >> 2);
+    }
+    return h;
+}
+
+// factkey を生成する関数。 64bit にパックできる場合は、64bit pack に、できない場合は、64bit mix hash にする
+static inline uint64_t factkey64(int pred, const std::vector<int> &args) {
+    if (pred >= 0 && pred <= 0xFFFF && args.size() <= 3 && ids_fit_u16(args)) {
+        return pack16_pred_args3(pred, args);
+    } else {
+        return mix64_from_ids(pred, args);
+    }
+}
+
+//
 
 // --- 内部で使う補助関数 ---
 // サブタイプか判定する関数
@@ -301,13 +350,17 @@ GroundTask ground(const Domain& d, const Problem& p)
     }
 
     // objects を先に type 別に登録する
-    std::unordered_map<std::string, std::vector<std::string>> objects_of_type; // type -> [object, ...]
+    std::unordered_map<std::string, std::vector<std::string>> objects_of_type; // type -> [name, ...]
+    std::unordered_map<std::string, std::vector<int>> objects_of_type_id; // type -> [id, ...]
     objects_of_type.reserve(d.types.size());
+    objects_of_type_id.reserve(d.types.size());
     for (const auto& want : d.types) {
-        auto& vec = objects_of_type[want];
+        auto& vecN = objects_of_type[want];
+        auto& vecI = objects_of_type_id[want];
         for (const auto& [oname, oty] : G.obj_ty) {
             if (is_subtype(d, oty, want)) {
-                vec.push_back(oname);
+                vecN.push_back(oname);
+                vecI.push_back(G.obj_id.at(oname));
             }
         }
     }
@@ -346,9 +399,11 @@ GroundTask ground(const Domain& d, const Problem& p)
     }
 
     // init のハッシュ集合（静的述語チェックで使う）を一度だけ構築
-    std::unordered_set<FactKey, FactKeyHash> init_set;
+    std::unordered_set<uint64_t> init_set;
     init_set.reserve(G.init_pos.size() * 2);
-    for (auto& f : G.init_pos) init_set.insert(FactKey{f.pred, f.args});  
+    for (auto& f : G.init_pos) {
+        init_set.insert(factkey64(f.pred, f.args));
+    }  
 
     // goal
     {
@@ -393,23 +448,23 @@ GroundTask ground(const Domain& d, const Problem& p)
         collect_effects(act.effect, effA_tmpl, effD_tmpl, incs_tmpl);
 
         // 各パラメータに適合するオブジェクト候補集合
-        std::vector<std::vector<std::string>> cand; // 各パラメータに対するオブジェクト候補のリストが順に入る
-        cand.resize(act.params.size());
+        std::vector<std::vector<int>> cand_ids; // 各パラメータに対するオブジェクト候補のリストが順に入る
+        cand_ids.resize(act.params.size());
         for (size_t i=0; i<act.params.size(); ++i) {
             const auto& tv = act.params[i];
-            auto itv = objects_of_type.find(tv.type);
-            if (itv != objects_of_type.end()) {
+            auto itv = objects_of_type_id.find(tv.type);
+            if (itv != objects_of_type_id.end()) {
                 const auto& src = itv->second;
-                cand[i].reserve(src.size());
-                cand[i].insert(cand[i].end(), src.begin(), src.end());
+                cand_ids[i].reserve(src.size());
+                cand_ids[i].insert(cand_ids[i].end(), src.begin(), src.end());
             }
-            if (cand[i].empty()) {
+            if (cand_ids[i].empty()) {
                 // このパラメータに合う object がないならばアクションは生成されないので、候補をクリアする
-                cand.clear();
+                cand_ids.clear();
                 break;
             }
         }
-        if (cand.empty() && !act.params.empty()) continue;
+        if (cand_ids.empty() && !act.params.empty()) continue;
 
         // 直積で全代入を生成
         std::vector<size_t> idx(act.params.size(), 0);
@@ -418,7 +473,6 @@ GroundTask ground(const Domain& d, const Problem& p)
         // sigma の展開、先に早期チェックを行うラムダ関数
         auto make_ground_action = [&](const std::unordered_map<std::string,std::string>& sigma) {
             G.stats.candidates++; // 候補カウント
-
             // --- all-different による早期チェック ---
             //if (act.params.size() > 1) {
             //    std::unordered_set<std::string> seen;
@@ -447,7 +501,7 @@ GroundTask ground(const Domain& d, const Problem& p)
                     if (oit == G.obj_id.end()) return false;
                     ids.push_back(oit->second);
                 }
-                bool in_init = init_set.count(FactKey{pit->second, ids});
+                bool in_init = (init_set.count(factkey64(pit->second, ids)) != 0);
                 return positive ? in_init : !in_init; // positive の場合は in_init を返し、そうでなければ !in_init を返す
             };
 
@@ -515,7 +569,8 @@ GroundTask ground(const Domain& d, const Problem& p)
             while (true) { // 直積ループを行う
                 std::unordered_map<std::string,std::string> sigma;
                 for (size_t i=0;i<act.params.size();++i) {
-                    sigma[act.params[i].name] = cand[i][idx[i]];
+                    int oid = cand_ids[i][ idx[i] ];
+                    sigma[act.params[i].name] = G.objects[oid];
                 }
                 make_ground_action(sigma);
 
@@ -523,7 +578,7 @@ GroundTask ground(const Domain& d, const Problem& p)
                 size_t k = act.params.size();
                 while (k>0) {
                     --k; // index に合わせて、 k を最初に 1 だけ減らす
-                    if (++idx[k] < cand[k].size()) break; // もし k 番目の index が範囲内ならば、ここでループを抜ける
+                    if (++idx[k] < cand_ids[k].size()) break; // もし k 番目の index が範囲内ならば、ここでループを抜ける
                     idx[k] = 0; // 桁が溢れたら 0 に戻す
                 }
                 if (k==0 && idx[0]==0) break; // すべての桁が溢れたら終了
@@ -535,8 +590,8 @@ GroundTask ground(const Domain& d, const Problem& p)
 
     // --- 前向き到達可能性による pruning ---
     // R+ を init から開始
-    std::unordered_set<FactKey, FactKeyHash> R;
-    for (auto& f : G.init_pos) R.insert(FactKey{f.pred, f.args}); // init の positive な事実を R+ に追加
+    std::unordered_set<uint64_t> R;
+    for (auto& f : G.init_pos) R.insert(factkey64(f.pred, f.args)); // init の positive な事実を R+ に追加
 
     // R+ の拡張を固定点まで行う
     bool changed = true;
@@ -545,14 +600,14 @@ GroundTask ground(const Domain& d, const Problem& p)
         for (const auto& a : G.actions) {
             bool ok = true;
             for (const auto& pr : a.pre_pos) {
-                if (!R.count(FactKey{pr.pred, pr.args})) { // pre_pos の全ての要素が R+ に含まれているかチェック
+                if (!R.count(factkey64(pr.pred, pr.args))) { // pre_pos の全ての要素が R+ に含まれているかチェック
                     ok = false;
                     break;
                 }
             }
             if (!ok) continue; // もしそのアクションの前提条件が満たされていなかったらスキップ
             for (const auto& ad : a.eff_add) {
-                if (R.insert(FactKey{ad.pred, ad.args}).second) { // 新しい事実が R+ に追加されたら
+                if (R.insert(factkey64(ad.pred, ad.args)).second) { // 新しい事実が R+ に追加されたら
                     changed = true;
                 }
             }
@@ -565,7 +620,7 @@ GroundTask ground(const Domain& d, const Problem& p)
     for (auto& a : G.actions) {
         bool ok = true;
         for (auto& pr : a.pre_pos) {
-            if (!R.count(FactKey{pr.pred, pr.args})) {
+            if (!R.count(factkey64(pr.pred, pr.args))) {
                 ok = false;
                 break;
             }
@@ -580,9 +635,9 @@ GroundTask ground(const Domain& d, const Problem& p)
 
     // --- 後ろ向き関連性による pruning ---
     // G（有益事実集合）をゴールから開始
-    std::unordered_set<FactKey, FactKeyHash> Gfacts;
+    std::unordered_set<uint64_t> Gfacts;
     for (auto& g : G.goal_pos) { // ゴールの positive な事実を G に追加
-        Gfacts.insert(FactKey{g.pred, g.args});
+        Gfacts.insert(factkey64(g.pred, g.args));
     }
 
     // relevance の固定点計算
@@ -594,7 +649,7 @@ GroundTask ground(const Domain& d, const Problem& p)
             auto& a = G.actions[i];
             bool produces_goal = false;
             for (auto& ad : a.eff_add) {
-                if (Gfacts.count(FactKey{ad.pred, ad.args})) { // add に goal を生み出すものがあるなら
+                if (Gfacts.count(factkey64(ad.pred, ad.args))) { // add に goal を生み出すものがあるなら
                     produces_goal = true;
                     break;
                 }
@@ -605,7 +660,7 @@ GroundTask ground(const Domain& d, const Problem& p)
                 grown = true;
             }
             for (auto& pr : a.pre_pos) {
-                if (Gfacts.insert(FactKey{pr.pred, pr.args}).second) { // pre を G に追加
+                if (Gfacts.insert(factkey64(pr.pred, pr.args)).second) { // pre を G に追加
                     grown = true;
                 }
             }
