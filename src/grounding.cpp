@@ -6,6 +6,24 @@
 #include <unordered_set>
 
 namespace planner {
+// --- より高速な事実に対する整数キーの Structure ---
+struct FactKey{
+    int pred;
+    std::vector<int> args;
+    bool operator==(const FactKey& o) const noexcept {
+        return pred == o.pred && args == o.args;
+    } 
+};
+
+struct FactKeyHash {
+    size_t operator() (const FactKey& k) const noexcept {
+        size_t h = std::hash<int>{}(k.pred);
+        for (int v : k.args) {
+            h ^= std::hash<int>{}(v) + 0x9e3779b97f4a7c15ull + (h<<6) + (h>>2);
+        }
+        return h;
+    }
+};
 
 // --- 内部で使う補助関数 ---
 // サブタイプか判定する関数
@@ -147,16 +165,14 @@ static bool object_fits_type(const Domain& d,
 // Atom -> GroundAtom 変換を行う関数
 static GroundAtom ground_atom(const Atom& a,
                               const Domain& d,
-                              const std::unordered_map<std::string,int>& obj_id, // object -> id
-                              const std::unordered_map<std::string,std::string>& obj_ty, // object -> type
-                              const std::unordered_map<std::string,int>& pred_id) // predicate -> id
+                              const GroundTask& G)
 {
-    auto pit = pred_id.find(a.pred);
-    if (pit == pred_id.end()) // マップで見つからなかった場合はエラー
+    auto pit = G.pred_id.find(a.pred);
+    if (pit == G.pred_id.end()) // マップで見つからなかった場合はエラー
         throw std::runtime_error("predicate not declared: " + a.pred);
     int pid = pit->second; // predicate id
-    const auto& ps = find_pred(d, a.pred);
-    if (ps.params.size() != a.args.size()) // ドメインで宣言された述語の引数の数と異なる場合はエラー
+    const auto& ps = G.preds[pid];
+    if (ps.types.size() != a.args.size()) // ドメインで宣言された述語の引数の数と異なる場合はエラー
         throw std::runtime_error("arity mismatch in atom: " + a.pred);
 
     GroundAtom ga;
@@ -164,12 +180,12 @@ static GroundAtom ground_atom(const Atom& a,
     ga.args.reserve(a.args.size());
     for (size_t i=0;i<a.args.size();++i) {
         const std::string& obj = a.args[i];
-        auto oit = obj_id.find(obj); // object id
-        if (oit == obj_id.end()) // object が見つからなかった場合はエラー
+        auto oit = G.obj_id.find(obj); // object id
+        if (oit == G.obj_id.end()) // object が見つからなかった場合はエラー
             throw std::runtime_error("unknown object: " + obj + " (in " + a.pred + " arg#" + std::to_string(i) + ")");
         // 型チェック（述語パラメータ型に対して）
-        if (!object_fits_type(d, obj_ty, obj, ps.params[i].type))
-            throw std::runtime_error("type mismatch: " + obj + " :: " + obj_ty.at(obj) +" !<= " + ps.params[i].type + " (in " + a.pred + " arg#" + std::to_string(i) + ")");
+        if (!object_fits_type(d, G.obj_ty, obj, ps.types[i]))
+            throw std::runtime_error("type mismatch: " + obj + " :: " + G.obj_ty.at(obj) +" !<= " + ps.types[i] + " (in " + a.pred + " arg#" + std::to_string(i) + ")");
         ga.args.push_back(oit->second);
     }
     return ga;
@@ -284,6 +300,18 @@ GroundTask ground(const Domain& d, const Problem& p)
         G.obj_ty[name] = ty; // object -> type
     }
 
+    // objects を先に type 別に登録する
+    std::unordered_map<std::string, std::vector<std::string>> objects_of_type; // type -> [object, ...]
+    objects_of_type.reserve(d.types.size());
+    for (const auto& want : d.types) {
+        auto& vec = objects_of_type[want];
+        for (const auto& [oname, oty] : G.obj_ty) {
+            if (is_subtype(d, oty, want)) {
+                vec.push_back(oname);
+            }
+        }
+    }
+
     // predicates
     for (auto& ps : d.predicates) {
         if (G.pred_id.count(ps.name)) throw std::runtime_error("duplicate predicate: " + ps.name);
@@ -314,20 +342,20 @@ GroundTask ground(const Domain& d, const Problem& p)
 
     // init (命題) を ground 化し、 G.init_pos に登録する
     for (auto& a : p.init) {
-        G.init_pos.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
+        G.init_pos.push_back(ground_atom(a, d, G));
     }
 
     // init のハッシュ集合（静的述語チェックで使う）を一度だけ構築
-    std::unordered_set<std::string> init_set;
+    std::unordered_set<FactKey, FactKeyHash> init_set;
     init_set.reserve(G.init_pos.size() * 2);
-    for (auto& f : G.init_pos) init_set.insert(key_of(f));
+    for (auto& f : G.init_pos) init_set.insert(FactKey{f.pred, f.args});  
 
     // goal
     {
         std::vector<Atom> gp, gn;
         collect_literals_pre(p.goal, gp, gn); // positive, negative のリテラルをそれぞれ集める
-        for (auto& a : gp) G.goal_pos.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
-        for (auto& a : gn) G.goal_neg.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
+        for (auto& a : gp) G.goal_pos.push_back(ground_atom(a, d, G));
+        for (auto& a : gn) G.goal_neg.push_back(ground_atom(a, d, G));
     }
 
     // --- 静的述語の検出 ---
@@ -369,10 +397,11 @@ GroundTask ground(const Domain& d, const Problem& p)
         cand.resize(act.params.size());
         for (size_t i=0; i<act.params.size(); ++i) {
             const auto& tv = act.params[i];
-            for (auto& [oname, oty] : G.obj_ty) {
-                if (object_fits_type(d, G.obj_ty, oname, tv.type)) {
-                    cand[i].push_back(oname); // type に適合するオブジェクトを追加する
-                }
+            auto itv = objects_of_type.find(tv.type);
+            if (itv != objects_of_type.end()) {
+                const auto& src = itv->second;
+                cand[i].reserve(src.size());
+                cand[i].insert(cand[i].end(), src.begin(), src.end());
             }
             if (cand[i].empty()) {
                 // このパラメータに合う object がないならばアクションは生成されないので、候補をクリアする
@@ -418,7 +447,7 @@ GroundTask ground(const Domain& d, const Problem& p)
                     if (oit == G.obj_id.end()) return false;
                     ids.push_back(oit->second);
                 }
-                bool in_init = init_set.count(key_of_ids(pit->second, ids));
+                bool in_init = init_set.count(FactKey{pit->second, ids});
                 return positive ? in_init : !in_init; // positive の場合は in_init を返し、そうでなければ !in_init を返す
             };
 
@@ -460,10 +489,10 @@ GroundTask ground(const Domain& d, const Problem& p)
             for (auto& a : effD) a = subst_atom(a, sigma);
 
             // Ground 化する
-            for (auto& a : preP) ga.pre_pos.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
-            for (auto& a : preN) ga.pre_neg.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
-            for (auto& a : effA) ga.eff_add.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
-            for (auto& a : effD) ga.eff_del.push_back(ground_atom(a, d, G.obj_id, G.obj_ty, G.pred_id));
+            for (auto& a : preP) ga.pre_pos.push_back(ground_atom(a, d, G));
+            for (auto& a : preN) ga.pre_neg.push_back(ground_atom(a, d, G));
+            for (auto& a : effA) ga.eff_add.push_back(ground_atom(a, d, G));
+            for (auto& a : effD) ga.eff_del.push_back(ground_atom(a, d, G));
 
             // cost（incs_tmpl をそのまま使う）
             double cost = 0.0;
@@ -506,8 +535,8 @@ GroundTask ground(const Domain& d, const Problem& p)
 
     // --- 前向き到達可能性による pruning ---
     // R+ を init から開始
-    std::unordered_set<std::string> R;
-    for (auto& f : G.init_pos) R.insert(key_of(f)); // init の positive な事実を R+ に追加
+    std::unordered_set<FactKey, FactKeyHash> R;
+    for (auto& f : G.init_pos) R.insert(FactKey{f.pred, f.args}); // init の positive な事実を R+ に追加
 
     // R+ の拡張を固定点まで行う
     bool changed = true;
@@ -516,14 +545,14 @@ GroundTask ground(const Domain& d, const Problem& p)
         for (const auto& a : G.actions) {
             bool ok = true;
             for (const auto& pr : a.pre_pos) {
-                if (!R.count(key_of(pr))) { // pre_pos の全ての要素が R+ に含まれているかチェック
+                if (!R.count(FactKey{pr.pred, pr.args})) { // pre_pos の全ての要素が R+ に含まれているかチェック
                     ok = false;
                     break;
                 }
             }
             if (!ok) continue; // もしそのアクションの前提条件が満たされていなかったらスキップ
             for (const auto& ad : a.eff_add) {
-                if (R.insert(key_of(ad)).second) { // 新しい事実が R+ に追加されたら
+                if (R.insert(FactKey{ad.pred, ad.args}).second) { // 新しい事実が R+ に追加されたら
                     changed = true;
                 }
             }
@@ -536,7 +565,7 @@ GroundTask ground(const Domain& d, const Problem& p)
     for (auto& a : G.actions) {
         bool ok = true;
         for (auto& pr : a.pre_pos) {
-            if (!R.count(key_of(pr))) {
+            if (!R.count(FactKey{pr.pred, pr.args})) {
                 ok = false;
                 break;
             }
@@ -551,9 +580,9 @@ GroundTask ground(const Domain& d, const Problem& p)
 
     // --- 後ろ向き関連性による pruning ---
     // G（有益事実集合）をゴールから開始
-    std::unordered_set<std::string> Gfacts;
+    std::unordered_set<FactKey, FactKeyHash> Gfacts;
     for (auto& g : G.goal_pos) { // ゴールの positive な事実を G に追加
-        Gfacts.insert(key_of(g));
+        Gfacts.insert(FactKey{g.pred, g.args});
     }
 
     // relevance の固定点計算
@@ -565,7 +594,7 @@ GroundTask ground(const Domain& d, const Problem& p)
             auto& a = G.actions[i];
             bool produces_goal = false;
             for (auto& ad : a.eff_add) {
-                if (Gfacts.count(key_of(ad))) { // add に goal を生み出すものがあるなら
+                if (Gfacts.count(FactKey{ad.pred, ad.args})) { // add に goal を生み出すものがあるなら
                     produces_goal = true;
                     break;
                 }
@@ -576,7 +605,7 @@ GroundTask ground(const Domain& d, const Problem& p)
                 grown = true;
             }
             for (auto& pr : a.pre_pos) {
-                if (Gfacts.insert(key_of(pr)).second) { // pre を G に追加
+                if (Gfacts.insert(FactKey{pr.pred, pr.args}).second) { // pre を G に追加
                     grown = true;
                 }
             }
