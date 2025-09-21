@@ -33,6 +33,7 @@ target_include_directories(planner_strips PUBLIC ${CMAKE_SOURCE_DIR}/include)
 add_library(planner_search STATIC src/heuristic.cpp src/search.cpp)
 target_link_libraries(planner_search PUBLIC planner_strips)
 target_include_directories(planner_search PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(planner_search PUBLIC USE_ROBIN_HOOD)
 
 # --- 実行ファイル ---
 add_executable(planner_not_fd src/main.cpp)

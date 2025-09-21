@@ -83,4 +83,22 @@ std::string state_to_string(const StripsTask& st, const StripsState& s, const Gr
 // ostream 出力
 std::ostream& operator<<(std::ostream& os, const StripsState&);
 
+// --- 差分適用用の関数群 ---
+// Undo Structure
+struct Undo {
+    // 展開中に、ビットが変わった命題の id を入れるようのベクター
+    std::vector<int> flipped;
+};
+
+// 現在の undo スタック位置をマークする関数
+inline std::size_t undo_mark(const Undo& u) {
+    return u.flipped.size();
+}
+
+// state に action を差分適用し、変化したビットを Undo Structure に入れる関数
+void apply_inplace(const StripsTask& st, const StripsAction& a, StripsState& s, Undo& u);
+
+// Undo スタックを mark まで巻き戻す関数 (state を元の状態に戻す)
+void undo_to(StripsState& s, Undo& u, std::size_t mark);
+
 } // namespace planner

@@ -11,6 +11,7 @@
 #include <cassert>
 #include <sstream>
 #include <iostream>
+#include <robin_hood.h>
 
 namespace planner {
 
@@ -94,21 +95,35 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
         return R;
     }
 
-    // state -> node_id にするマップ
-    std::unordered_map<StripsState,int,StripsStateHash> index_of;
+    // state -> node_id にするマップ (robinhood, ska/flat_hash_map, std を環境ようによって使い分ける)
+#if defined(USE_ROBIN_HOOD)
+    using StateMap = robin_hood::unordered_map<StripsState, int, StripsStateHash>;
+#elif defined(USE_SKA_FLAT)
+#include <ska/flat_hash_map.hpp>
+    struct StripsStateEq { bool operator()(const StripsState& a, const StripsState& b) const { return a.bits == b.bits; } };
+    using StateMap = ska::flat_hash_map<StripsState,int,StripsStateHash, StripsStateEq>;
+#else
+    using StateMap = std::unordered_map<StripsState, int, StripsStateHash>;
+#endif
+    StateMap index_of;
 
     if (all_action_costs_are_integers(st)) {
         // デバッグ用
         std::cout << "Note: all action costs are integers; using integer A* + BucketPQ." << std::endl;
 
         // state -> node_id
-        index_of.reserve(1 << 10);
+        index_of.reserve(1 << 15);
+    #if !defined(USE_ROBIN_HOOD)
+    // robin_hood には setter の max_load_factor(float) がないため、非 robin_hood 時のみ設定
+        index_of.max_load_factor(0.50f);
+    #endif
         index_of.emplace(R.nodes[0].s, 0);
 
         // ノードの情報
         struct MetaI { int g; int h; bool closed; };
-        std::unordered_map<int, MetaI> meta;
-        meta.reserve(1 << 10);
+        std::vector<MetaI> meta;
+        meta.reserve(1 << 15);
+        meta.emplace_back(MetaI{0, 0, false}); // 初期ノードの登録
 
         // OPEN リスト: pack_fh_asc(f,h) をキー、値はノード id
         TwoLevelBucketPQ open;
@@ -118,7 +133,8 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
         meta[0] = MetaI{0, h0, false};
         open.insert(0, pack_fh_asc(h0, h0));
 
-        StripsState succ;
+        StripsState work; // 1 コピー
+        Undo undo; // 差分適用 / 巻き戻し用
 
         while (!open.empty()) {
             // 最小値の取り出し
@@ -150,23 +166,29 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
             if (R.stats.expanded > p.max_expansions) break;
 
             // 展開
+            work = su;
+            undo.flipped.clear();
             for (int a = 0; a < (int)st.actions.size(); ++a) {
                 const auto& act = st.actions[a];
                 if (!is_applicable(st, su, act)) continue;
 
-                apply(st, su, act, succ); // 状態遷移
+                const std::size_t mark = undo_mark(undo);
+                apply_inplace(st, act, work, undo);
                 ++R.stats.generated;
 
                 const int w = rounding(act.cost);
                 const int tentative_g = meta[u].g + w;
 
-                auto it = index_of.find(succ);
+                auto it = index_of.find(work);
                 if (it == index_of.end()) { // 新規ノードの場合
                     const int v = (int)R.nodes.size();
-                    R.nodes.push_back(Node{succ, u, a});
+                    R.nodes.push_back(Node{work, u, a});
                     index_of.emplace(R.nodes[v].s, v);
 
                     const int hv = rounding(h(st, R.nodes[v].s));
+                    if ((int)meta.size() <= v) {
+                        meta.resize(v+1);
+                    }
                     meta[v] = MetaI{tentative_g, hv, false};
 
                     const UKey new_key = pack_fh_asc(tentative_g + hv, hv);
@@ -207,6 +229,7 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
                         if (meta[v].closed && !p.reopen_closed) continue;
                     }
                 }
+                undo_to(work, undo, mark);
             }
         }
         return R;
@@ -216,12 +239,18 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
         std::cout << "Note: action costs are not all integers; using non-integer A* search." << std::endl;
         
         // 初期設定
-        index_of.reserve(1024); // あらかじめ 2^10 個を予約しておく
+        index_of.reserve(1 << 15); // あらかじめ 2^15 個を予約しておく
+    #if !defined(USE_ROBIN_HOOD)
+        // robin_hood には setter の max_load_factor(float) がないため、非 robin_hood 時のみ設定
+        index_of.max_load_factor(0.50f);
+    #endif
         index_of.emplace(R.nodes[0].s, 0); // 初期状態を value = 0 として登録する
 
         struct MetaD { double g; double h; bool closed; };
-        std::unordered_map<int, MetaD> meta; 
-        meta.reserve(1024);
+        std::vector<MetaD> meta;
+        meta.reserve(1 << 15);
+        meta.emplace_back(MetaD{0.0, 0.0, false}); // 初期ノードの登録
+
         // open list
         struct QEl { double f; double h; int id; }; // Queue Element の定義
         auto cmp = [](const QEl& a, const QEl& b){
@@ -234,7 +263,8 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
         meta[0] = MetaD{0.0, h(st, s0), false};
         open.push({ meta[0].g + meta[0].h, meta[0].h, 0 });
 
-        StripsState succ;
+        StripsState work;
+        Undo undo;
         constexpr double EPS = 1e-12; // 誤差項
 
         while (!open.empty()) {
@@ -263,22 +293,28 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
             ++R.stats.expanded;
             if (R.stats.expanded > p.max_expansions) break; // ノードの展開上限数を越したら
 
+            work = su;
+            undo.flipped.clear();
             for (int a = 0; a < (int)st.actions.size(); ++a) {
                 const auto& act = st.actions[a];
                 if (!is_applicable(st, su, act)) continue;
 
-                apply(st, su, act, succ);
+                const std::size_t mark = undo_mark(undo);
+                apply_inplace(st, act, work, undo);
                 ++R.stats.generated;
 
                 const double tentative_g = meta[u].g + act.cost;
 
-                auto it = index_of.find(succ);
+                auto it = index_of.find(work);
                 if (it == index_of.end()) { // 新規ノードの場合
                     const int v = (int)R.nodes.size(); // 新しい id の生成
-                    R.nodes.push_back(Node{succ, u, a});
+                    R.nodes.push_back(Node{work, u, a});
                     index_of.emplace(R.nodes[v].s, v);
 
                     const double hv = h(st, R.nodes[v].s);
+                    if ((int)meta.size() <= v) {
+                        meta.resize(v+1);
+                    }
                     meta[v] = MetaD{tentative_g, hv, false};
                     open.push({ tentative_g + hv, hv, v });
                 } else { // 既存ノードの場合
@@ -308,8 +344,9 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
                         }
                         // 再オープン許可でも改善なしならスキップ
                         ++R.stats.duplicates;
-                        }
                     }
+                }
+                undo_to(work, undo, mark);
             }
         }
         return R;

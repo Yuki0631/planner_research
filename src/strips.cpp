@@ -4,6 +4,7 @@
 #include <queue>
 #include <cstring>
 #include <algorithm>
+#include <cassert>
 
 namespace planner {
 
@@ -124,7 +125,8 @@ StripsTask compile_to_strips(const GroundTask& gt) {
 // 初期状態の真偽ベクトルを作成する関数
 StripsState make_init_state(const StripsTask& st) {
     StripsState s;
-    s.bits.assign(nwords(st.num_facts()), 0ull); // 必要な 64bit 要素数を確保し、すべて unsigned long long 型の 0 にする
+    s.bits.resize(nwords(st.num_facts()));
+    std::fill(s.bits.begin(), s.bits.end(), 0ull); // 必要語数だけ 0 にする
     for (int f : st.init_true) set_bit(s.bits, f); // true の 事実を 1 にする
     return s;
 }
@@ -207,6 +209,34 @@ std::string state_to_string(const StripsTask& st, const StripsState& s, const Gr
 std::ostream& operator<<(std::ostream& os, const StripsState& s) {
     os << "StripsState[" << s.bits.size() << " words]";
     return os;
+}
+
+// --- 差分適用用の関数群 ---
+// State のビット反転を適用し、その id を Undo に積む関数
+void apply_inplace(const StripsTask& st, const StripsAction& a, StripsState& s, Undo& u) {
+    (void) st;
+    for (int f : a.del) {
+        if (test_bit(s.bits, f)) {
+            clear_bit(s.bits, f);
+            u.flipped.push_back(f);
+        }
+    }
+
+    for (int f : a.add) {
+        if (!test_bit(s.bits, f)) {
+            set_bit(s.bits, f);
+            u.flipped.push_back(f);
+        }
+    }
+}
+
+// Undo スタックを mark まで巻き戻す関数
+void undo_to(StripsState& s, Undo& u, std::size_t mark) {
+    assert(mark <= u.flipped.size());
+    for (std::size_t i = u.flipped.size(); i-- > mark;) {
+        int f = u.flipped[i];
+        s.bits[f >> 6] ^= (1ull << (f & 63)); // XOR 演算で、1 -> 0, 0 -> 1 として元に戻す
+    }
 }
 
 } // namespace planner
