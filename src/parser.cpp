@@ -458,6 +458,8 @@ Domain Parser::parseDomain(){
     d.name = expectName("domain name");
     lex_.expect(TokenType::RPAR, ")");
 
+    bool saw_types = false; // ← :types を見たかどうか
+
     // セクションを読む
     while (true) {
         auto t = lex_.peek();
@@ -475,6 +477,7 @@ Domain Parser::parseDomain(){
 
         // :types
         if (kw == "types") {
+            saw_types = true;
             parseTypesSectionInto(d);
             continue;
         }
@@ -523,43 +526,43 @@ Domain Parser::parseDomain(){
             d.types.push_back("object");
         }
     }
+    if (!saw_types) {
+        // d.types に type がなければ追加し、親を object にする関数
+        auto ensure_type = [&](const std::string& ty){
+            if (ty.empty()) return;
+            bool present = false;
+            for (const auto& t : d.types) {
+                if (t == ty) {
+                    present = true;
+                    break;
+                }
+            }
+            if (!present) {
+                d.types.push_back(ty);
+                d.supertypes[ty].push_back("object");
+            }
+        };
 
-    // d.types に type がなければ追加し、親を object にする関数
-    auto ensure_type = [&](const std::string& ty){
-        if (ty.empty()) return;
-        bool present = false;
-        for (const auto& t : d.types) {
-            if (t == ty) {
-                present = true;
-                break;
+        // 述語パラメータで使われた型を登録する
+        for (const auto& ps : d.predicates) {
+            for (const auto& tv : ps.params) {
+                ensure_type(tv.type);
             }
         }
-        if (!present) {
-            d.types.push_back(ty);
-            d.supertypes[ty].push_back("object");
-        }
-    };
 
-    // 述語パラメータで使われた型を登録する
-    for (const auto& ps : d.predicates) {
-        for (const auto& tv : ps.params) {
-            ensure_type(tv.type);
+        // アクションパラメータで使われた型を登録する
+        for (const auto& a : d.actions) {
+            for (const auto& tv : a.params) {
+                ensure_type(tv.type);
+            }
         }
-    }
 
-    // アクションパラメータで使われた型を登録する
-    for (const auto& a : d.actions) {
-        for (const auto& tv : a.params) {
-            ensure_type(tv.type);
+        // 関数パラメータ / 戻り型で使われた型を登録する
+        for (const auto& fs : d.functions) {
+            for (const auto& tv : fs.params) {
+                ensure_type(tv.type);
+            }
         }
-    }
-
-    // 関数パラメータ / 戻り型で使われた型を登録する
-    for (const auto& fs : d.functions) {
-        for (const auto& tv : fs.params) {
-            ensure_type(tv.type);
-        }
-        ensure_type(fs.rettype); // 通常 number
     }
 
     // d.types を重複排除する
@@ -571,8 +574,8 @@ Domain Parser::parseDomain(){
             if (seen.insert(ty).second) {
                 uniq.push_back(ty);
             }
-            d.types.swap(uniq);
         }
+        d.types.swap(uniq);
     }
 
     return d;
