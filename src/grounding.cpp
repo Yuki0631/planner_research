@@ -409,8 +409,32 @@ GroundTask ground(const Domain& d, const Problem& p)
     {
         std::vector<Atom> gp, gn;
         collect_literals_pre(p.goal, gp, gn); // positive, negative のリテラルをそれぞれ集める
-        for (auto& a : gp) G.goal_pos.push_back(ground_atom(a, d, G));
-        for (auto& a : gn) G.goal_neg.push_back(ground_atom(a, d, G));
+
+        // 等式をフィルタするラムダ関数
+        auto handle_goal = [&](const std::vector<Atom>& atoms, bool positive) {
+            for (const auto& a : atoms) {
+                if (a.pred == "=") {
+                    if (a.args.size() != 2) {
+                        throw std::runtime_error("equality in goal expects 2 arguments");
+                    }
+                    const std::string& L = a.args[0];
+                    const std::string& R = a.args[1];
+                    bool holds = (L == R); // goal では変数は出ないので、定数同士の整合を見る
+                    if ((positive && !holds) || (!positive && holds)) {
+                        throw std::runtime_error("Unsatisfiable goal due to equality constraint");
+                    }
+                    continue; // 成立/不成立はここで処理が完了する
+                }
+                if (positive) {
+                    G.goal_pos.push_back(ground_atom(a, d, G));
+                } else {
+                    G.goal_neg.push_back(ground_atom(a, d, G));
+                }
+            }
+        };
+
+        handle_goal(gp, true); // positive なので、equal はそのまま "=" の意味
+        handle_goal(gn, false); // negative なので、equal は反転させた "not =" の意味 
     }
 
     // --- 静的述語の検出 ---
@@ -446,6 +470,41 @@ GroundTask ground(const Domain& d, const Problem& p)
         std::vector<Formula::Increase> incs_tmpl;
         collect_literals_pre(act.precond, preP_tmpl, preN_tmpl);
         collect_effects(act.effect, effA_tmpl, effD_tmpl, incs_tmpl);
+
+        // 等式を抽出して論理命題から分離する
+        struct EqConstraint {
+            std::string lhs, rhs; // 式
+            bool positive; // equal or not equal
+        };
+
+        std::vector<EqConstraint> eqs; // 等式を積むベクトル
+
+        auto take_eqs = [&](std::vector<Atom>& atoms, bool positive) {
+            std::vector<Atom> kept; // 等式を含む命題以外のものを積むためのベクトル
+            kept.reserve(atoms.size());
+            for (auto& a : atoms) {
+                if (a.pred == "=") { // "=" が述語であると認識されてしまっている場合
+                    if (a.args.size() != 2) {
+                        throw std::runtime_error("equality expects 2 arguments");
+                    }
+                    eqs.push_back({a.args[0], a.args[1], positive});
+                } else {
+                    kept.push_back(std::move(a));
+                }
+            }
+            atoms.swap(kept);
+        };
+
+        take_eqs(preP_tmpl, true); // positive preconditions なので、命題の "=" は単純に "="
+        take_eqs(preN_tmpl, false); // negative preconditions なので、命題の "=" は反転して "not ="
+
+        // effect 内には、 "=" は来ないので、来たらエラーを吐くようにする
+        for (auto& a : effA_tmpl) {
+            if (a.pred == "=") throw std::runtime_error("equality not allowed in effect");
+        }
+        for (auto& a : effD_tmpl) {
+            if (a.pred == "=") throw std::runtime_error("equality not allowed in effect");
+        }
 
         // 各パラメータに適合するオブジェクト候補集合
         std::vector<std::vector<int>> cand_ids; // 各パラメータに対するオブジェクト候補のリストが順に入る
@@ -484,6 +543,22 @@ GroundTask ground(const Domain& d, const Problem& p)
             //        }
             //    }
             //}
+
+            // --- 等式制約の早期チェック ---
+            auto resolve = [&](const std::string& s)->std::string{
+                auto it = sigma.find(s);
+                return (it != sigma.end()) ? it -> second : s; // 変数なら置換し、定数ならそのままにする
+            };
+
+            for (const auto& e : eqs) {
+                const std::string L = resolve(e.lhs);
+                const std::string R = resolve(e.rhs);
+                if (e.positive) {
+                    if (L != R) return;
+                } else {
+                    if (L == R) return;
+                }
+            }
 
             // --- 静的述語の早期チェック ---
             auto is_static_atom = [&](const Atom& a)->bool {
