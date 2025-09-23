@@ -208,7 +208,26 @@ static bool object_fits_type(const Domain& d,
 {
     auto it = obj_ty.find(obj);
     if (it == obj_ty.end()) return false;
-    return is_subtype(d, it->second, need_ty); // 型適合性のチェック
+    const std::string& have = it->second;
+
+    auto bar = need_ty.find('|');
+    if (bar == std::string::npos) { // :either ではなかった場合
+        return is_subtype(d, have, need_ty);
+    } else {
+        size_t start = 0;
+        while (true) {
+            size_t pos = need_ty.find('|', start);
+            std::string one = need_ty.substr(start, (pos == std::string::npos ? need_ty.size() : pos) - start);
+            if (!one.empty() && is_subtype(d, have, one)) { // その type が have のサブタイプである場合
+                return true;
+            }
+            if (pos == std::string::npos) { // '|' が見つからなかった場合
+                break;
+            }
+            start = pos + 1;
+        }
+        return false;
+    }
 }
 
 // Atom -> GroundAtom 変換を行う関数
@@ -511,12 +530,38 @@ GroundTask ground(const Domain& d, const Problem& p)
         cand_ids.resize(act.params.size());
         for (size_t i=0; i<act.params.size(); ++i) {
             const auto& tv = act.params[i];
-            auto itv = objects_of_type_id.find(tv.type);
-            if (itv != objects_of_type_id.end()) {
-                const auto& src = itv->second;
-                cand_ids[i].reserve(src.size());
+            
+            // 与えられたベクターの要素全てを、cand_idsの i 番目の要素に入れるラムダ関数
+            auto add_all = [&](const std::vector<int>& src){
                 cand_ids[i].insert(cand_ids[i].end(), src.begin(), src.end());
+            };
+
+            if (tv.type.find('|') != std::string::npos) { // :either types の場合
+                std::unordered_set<int> uniq;
+                size_t start = 0;
+                while (true) {
+                    size_t pos = tv.type.find('|', start);
+                    std::string one = tv.type.substr(start, (pos == std::string::npos ? tv.type.size() : pos) - start);
+                    if (!one.empty()) {
+                        auto it1 = objects_of_type_id.find(one);
+                        if (it1 != objects_of_type_id.end()) { // そのタイプの object(s) が存在する場合
+                            for (int v : it1->second) {
+                                if (uniq.insert(v).second) {
+                                    cand_ids[i].push_back(v);
+                                }
+                            }
+                        }
+                        if (pos == std::string::npos) { // '|' が見つからない場合 (全部のタイプを操作し終えた場合)
+                            break;
+                        }
+                        start = pos + 1;
+                    }
+                }
+            } else {
+                auto itv = objects_of_type_id.find(tv.type);
+                if (itv != objects_of_type_id.end()) add_all(itv->second);
             }
+
             if (cand_ids[i].empty()) {
                 // このパラメータに合う object がないならばアクションは生成されないので、候補をクリアする
                 cand_ids.clear();

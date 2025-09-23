@@ -84,6 +84,36 @@ std::string Parser::expectName(const char* what){
     return t.lexeme;
 }
 
+std::string Parser::parseTypeOrEither(const char* what) {
+    // 先読みが '(' なら (either ...) を期待する
+    if (lex_.peek().type == TokenType::LPAR) {
+        lex_.expect(TokenType::LPAR, "(");
+
+        auto head = lex_.expect(TokenType::NAME, "either").lexeme;
+        if (head != "either") {
+            throw std::runtime_error(std::string("Expected 'either' for ") + what + loc(lex_.peek()));
+        }
+
+        std::string out;
+        bool first = true;
+        while (lex_.peek().type != TokenType::RPAR) { // type1|type2|...
+            std::string ty = lex_.expect(TokenType::NAME, "type name in (either ...)").lexeme;
+            if (!first) out.push_back('|');
+            out += ty;
+            first = false;
+        }
+
+        lex_.expect(TokenType::RPAR, ")");
+        if (out.empty()) {
+            throw std::runtime_error(std::string("empty (either ...) for ") + what + loc(lex_.peek()));
+        }
+
+        return out;
+    }
+    // それ以外は通常の NAME 型なので、expectName() 関数を使用する
+    return expectName(what);
+}
+
 // キーワードを取得する関数
 std::string Parser::expectKeyword(const char* what){
     auto t = lex_.next();
@@ -251,7 +281,7 @@ std::vector<TypedVar> Parser::parseVarListInParens(){
         if (t.type == TokenType::VARIABLE) {
             buf.push_back(t.lexeme);
         } else if (t.type == TokenType::DASH) {
-            std::string ty = expectName("type name after '-'"); // ty means type
+            std::string ty = parseTypeOrEither("type name after '-'"); // ty means type
             for (auto& v : buf) out.push_back({v, ty});
             buf.clear();
         } else {
@@ -317,7 +347,7 @@ std::vector<PredicateSchema> Parser::parsePredicatesSection(){
             if (t.type == TokenType::VARIABLE) {
                 buf.push_back(t.lexeme);
             } else if (t.type == TokenType::DASH) {
-                std::string ty = expectName("type name");
+                std::string ty = parseTypeOrEither("type name");
                 for (auto& v : buf) s.params.push_back({v, ty});
                 buf.clear();
             } else {
@@ -360,7 +390,7 @@ std::vector<FunctionSchema> Parser::parseFunctionsSection() {
                 if (t.type == TokenType::VARIABLE) {
                     buf.push_back(t.lexeme);
                 } else if (t.type == TokenType::DASH) {
-                    std::string ty = expectName("type name after '-'");
+                    std::string ty = parseTypeOrEither("type name after '-'");
                     for (auto& v : buf) fs.params.push_back({v, ty});
                     buf.clear();
                 } else {

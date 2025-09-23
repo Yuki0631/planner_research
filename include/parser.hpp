@@ -157,6 +157,10 @@ private:
 
     // 型付き変数列（(?x ?y - T ?z - U) など）
     std::vector<TypedVar> parseVarListInParens();
+
+    // :either 対応用の関数 - type_name or - (either T1 T2 ...)
+    std::string parseTypeOrEither(const char* what);
+    
 };
 
 } // namespace planner
