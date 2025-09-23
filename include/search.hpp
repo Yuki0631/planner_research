@@ -38,7 +38,7 @@ struct SearchResult {
 
 // 探索用のパラメータをまとめた struct
 struct SearchParams {
-    int   max_expansions = 50000000;
+    int   max_expansions = 500000000;
     bool  reopen_closed  = true; // closed をもう一度 open するかどうか
     bool  stop_on_generate_goal = true; // 生成時に goal 条件を満たしていたら停止
 };
@@ -53,7 +53,7 @@ double eval_plan_cost(const StripsTask& st, const std::vector<int>& plan);
 std::string plan_to_string(const StripsTask& st, const std::vector<int>& plan);
 
 // 探索アルゴリズム
-SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p = {}); // A*
+SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const SearchParams& p = {}); // A*
 
 // cost がすべて整数かどうかを判定する関数
 bool all_action_costs_are_integers(const planner::StripsTask& st, double eps = 1e-9);

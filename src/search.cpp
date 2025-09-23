@@ -80,7 +80,7 @@ int rounding(double v) {
 
 // --- A* Search ---
 
-SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
+SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const SearchParams& p) {
     SearchResult R; // 結果を格納する用の R
 
     // 初期ノード
@@ -107,7 +107,7 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const SearchParams& p) {
 #endif
     StateMap index_of;
 
-    if (all_action_costs_are_integers(st)) {
+    if (all_action_costs_are_integers(st) && h_int) {
         // デバッグ用
         std::cout << "Note: all action costs are integers; using integer A* + BucketPQ." << std::endl;
 

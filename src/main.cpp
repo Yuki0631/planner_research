@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <chrono>
 #include <filesystem>
+#include <cmath>
 
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -35,6 +36,16 @@ static void print_usage(const char* argv0) {
       << "  " << argv0 << " domain.pddl problem.pddl --algo astar --h goalcount --plan-dir directory\n"
       << "  " << argv0 << " domain.pddl problem.pddl --algo astar --h wgoalcount 2.0 --plan-dir directory\n";
 }
+
+// 整数かどうか判定する関数
+bool check_int(double x, double eps = 1e-9) {
+    if (std::fabs(x - std::round(x)) < eps) {
+        return true;
+    } else {
+        return false; 
+    }
+}
+
 
 int main(int argc, char** argv) {
     try {
@@ -124,9 +135,21 @@ int main(int argc, char** argv) {
 
         // --- Heuristic ---
         HeuristicFn hf;
-        if (hname == "blind") hf = make_blind();
-        else if (hname == "goalcount") hf = make_goalcount();
-        else if (hname == "wgoalcount") hf = make_weighted_goalcount(w);
+        bool hint;
+        if (hname == "blind") {
+            hf = make_blind();
+            hint = true;
+        } else if (hname == "goalcount") {
+            hf = make_goalcount();
+            hint = true;
+        } else if (hname == "wgoalcount") {
+            hf = make_weighted_goalcount(w);
+            if (check_int(w)) {
+                hint = true;
+            } else {
+                hint = false;
+            }
+        }
         else throw std::runtime_error("unknown heuristic: " + hname);
 
         // --- Search ---
@@ -136,7 +159,7 @@ int main(int argc, char** argv) {
 
         if (algo == "astar") {
             auto t0_search = std::chrono::steady_clock::now();
-            res = astar(ST, hf, params);
+            res = astar(ST, hf, hint, params);
             auto t1_search = std::chrono::steady_clock::now();
             search_time = std::chrono::duration<double, std::milli>(t1_search - t0_search).count();
         } else {
