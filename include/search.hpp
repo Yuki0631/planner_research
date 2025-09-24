@@ -43,6 +43,32 @@ struct SearchParams {
     bool  stop_on_generate_goal = true; // 生成時に goal 条件を満たしていたら停止
 };
 
+// ノード id と bool の値を保存する用の bitpack structure
+struct BitMap{
+    std::vector<u_int64_t> data;
+
+    // コンストラクタ
+    BitMap(size_t n) {
+        data.resize((n + 63) >> 6);
+    }
+
+    void set(size_t u) {
+        data[u >> 6] |= 1ull << (0x3Full & u);
+    }
+
+    void reset(size_t u) {
+        data[u >> 6] &= ~(1ull << (0x3Full & u));
+    }
+
+    bool test(size_t u) {
+        return (data[u >> 6] >> (0x3Full & u)) & 1ull; 
+    }
+
+    void clear() {
+        std::fill(data.begin(), data.end(), static_cast<u_int64_t>(0)); 
+    }
+};
+
 // 経路復元用の関数
 std::vector<int> extract_plan(const std::vector<Node>& nodes, int goal_id);
 
