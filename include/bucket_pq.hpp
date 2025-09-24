@@ -229,7 +229,7 @@ public:
         p.present = true;
         b.push_back(v);
 
-        if (k < min_key_) min_key_ = k;
+        if (k < min_key_) min_key_ = k; // ここのオープンタイ見直せそう
         ++count_;
     }
 
