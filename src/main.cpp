@@ -162,6 +162,11 @@ int main(int argc, char** argv) {
             res = astar(ST, hf, hint, params);
             auto t1_search = std::chrono::steady_clock::now();
             search_time = std::chrono::duration<double, std::milli>(t1_search - t0_search).count();
+        } else if (algo == "gbfs") {
+            auto t0_search = std::chrono::steady_clock::now();
+            res = gbfs(ST, hf, hint, params);
+            auto t1_search = std::chrono::steady_clock::now();
+            search_time = std::chrono::duration<double, std::milli>(t1_search - t0_search).count();
         } else {
             throw std::runtime_error("unknown algo: " + algo);
         }
