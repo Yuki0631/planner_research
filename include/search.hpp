@@ -80,6 +80,7 @@ std::string plan_to_string(const StripsTask& st, const std::vector<int>& plan);
 
 // 探索アルゴリズム
 SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const SearchParams& p = {}); // A*
+SearchResult gbfs(const StripsTask& st, HeuristicFn h, const bool h_int, const SearchParams& p = {});
 
 // cost がすべて整数かどうかを判定する関数
 bool all_action_costs_are_integers(const planner::StripsTask& st, double eps = 1e-9);
