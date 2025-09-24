@@ -83,6 +83,14 @@ int rounding(double v) {
 SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const SearchParams& p) {
     SearchResult R; // 結果を格納する用の R
 
+    // 巻き戻しを RAII で保証する番兵の Structure
+    struct UndoGuard {
+        StripsState& work;
+        Undo& undo;
+        std::size_t mark;
+        ~UndoGuard() { undo_to(work, undo, mark); }
+    };
+
     // 初期ノード
     StripsState s0 = make_init_state(st);
     R.nodes.push_back(Node{ s0, -1, -1 });
@@ -173,6 +181,9 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const 
                 if (!is_applicable(st, su, act)) continue;
 
                 const std::size_t mark = undo_mark(undo);
+
+                UndoGuard ug{work, undo, mark};
+
                 apply_inplace(st, act, work, undo);
                 ++R.stats.generated;
 
@@ -226,10 +237,11 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const 
                         }
                     } else { // g 値の改善がない場合
                         ++R.stats.duplicates;
-                        if (meta[v].closed && !p.reopen_closed) continue;
+                        if (meta[v].closed && !p.reopen_closed) {
+                            continue;
+                        }
                     }
                 }
-                undo_to(work, undo, mark);
             }
         }
         return R;
@@ -300,6 +312,9 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const 
                 if (!is_applicable(st, su, act)) continue;
 
                 const std::size_t mark = undo_mark(undo);
+
+                UndoGuard ug{work, undo, mark};
+
                 apply_inplace(st, act, work, undo);
                 ++R.stats.generated;
 
@@ -346,9 +361,139 @@ SearchResult astar(const StripsTask& st, HeuristicFn h, const bool h_int, const 
                         ++R.stats.duplicates;
                     }
                 }
-                undo_to(work, undo, mark);
             }
         }
+        return R;
+    }
+
+}
+
+// --- GBFS ---
+
+SearchResult gbfs(const StripsTask& st, HeuristicFn h, const bool h_int, const SearchParams& p) {
+    SearchResult R;
+
+    struct UndoGuard {
+        StripsState& work;
+        Undo& undo;
+        std::size_t mark;
+        ~UndoGuard() { undo_to(work, undo, mark); }
+    };
+
+    // 初期ノード
+    StripsState s0 = make_init_state(st);
+    R.nodes.push_back(Node{s0, -1, -1});
+
+    // 初期ノードがゴールの場合
+    if (is_goal(st, s0)) {
+        R.solved = true;
+        R.plan.clear();
+        R.plan_cost = 0.0;
+        return R;
+    }
+
+    // state -> node_id にするマップ (robinhood, ska/flat_hash_map, std を環境ようによって使い分ける)
+#if defined(USE_ROBIN_HOOD)
+    using StateMap = robin_hood::unordered_map<StripsState, int, StripsStateHash>;
+#elif defined(USE_SKA_FLAT)
+#include <ska/flat_hash_map.hpp>
+    struct StripsStateEq { bool operator()(const StripsState& a, const StripsState& b) const { return a.bits == b.bits; } };
+    using StateMap = ska::flat_hash_map<StripsState,int,StripsStateHash, StripsStateEq>;
+#else
+    using StateMap = std::unordered_map<StripsState, int, StripsStateHash>;
+#endif
+    StateMap index_of;
+
+    // プランニングの問題が整数かどうかを表すフラグ
+    bool integer_check = (all_action_costs_are_integers(st) && h_int);
+
+    if (integer_check) { // 整数の場合
+        // デバッグ用の表示
+        std::cout << "Note: all action costs are integer and the heuristic function's value is integer " << std::endl;
+
+        // state -> node id のマップの確保
+        index_of.reserve(1 << 15);
+
+        // ノード情報 (open or close) を保存する用のベクター
+        struct MetaI {int h; bool closed;};
+        std::vector<MetaI> meta;
+        meta.reserve(1 << 15);
+        meta.emplace_back(MetaI{0, false});
+
+        // Open List
+        BucketPQ open;
+
+        // 初期ノードの登録
+        const int h0 = rounding(h(st, s0));
+        index_of.emplace(s0, 0);
+        open.insert(0, h0);
+        meta[0] = MetaI{h0, false};
+
+        StripsState work;
+        Undo undo;
+
+        while (!open.empty()) {
+            auto [id32, hu] = open.extract_min();
+            const int id = static_cast<int>(id32);
+
+            // 状態の取り出し
+            StripsState su = R.nodes[id].s;
+
+            // ゴール判定
+            if (is_goal(st, su)) {
+                R.solved = true;
+                R.plan = extract_plan(R.nodes, id);
+                R.plan_cost = eval_plan_cost(st, R.plan);
+                return R;
+            }
+
+            meta[id].closed = true;
+
+            ++R.stats.expanded;
+            if (R.stats.expanded > p.max_expansions) {
+                break;
+            }
+
+            // ノードの展開
+            work = su;
+            undo.flipped.clear();
+            for (int a = 0; a < (int)st.actions.size(); ++a) {
+                const auto& act = st.actions[a];
+                if (!is_applicable(st, su, act)) continue;
+
+                const std::size_t mark = undo_mark(undo);
+
+                UndoGuard ug{work, undo, mark};
+
+                apply_inplace(st, act, work, undo);
+                ++R.stats.generated;
+
+                auto it = index_of.find(work);
+                if (it == index_of.end()) { // 新規ノードの場合
+                    const int v = (int)R.nodes.size();
+                    R.nodes.push_back(Node{work, id, a});
+                    index_of.emplace(R.nodes[v].s, v);
+
+                    const int hv = rounding(h(st, R.nodes[v].s));
+
+                    if  ((int)meta.size() <= v) {
+                        meta.resize(v << 1);
+                    }
+
+                    meta[v] = MetaI{hv, false};
+                    open.insert(static_cast<uint32_t>(v), static_cast<uint32_t>(hv));
+                } else { // 既存ノードの場合, 基本的にノードで h value は不変なので、スキップする, h value を動的にする場合追加
+                    ++R.stats.duplicates;
+                }
+            }
+        }
+        return R;
+
+    } else { // 浮動小数点を含む場合
+        std::cout << "Note: a not integer action cost exists or the heuristic function's value is not integer" << std::endl;
+        R.solved = true;
+        R.plan.clear();
+        R.plan_cost = 0.0;
         return R;
     }
 
