@@ -491,9 +491,101 @@ SearchResult gbfs(const StripsTask& st, HeuristicFn h, const bool h_int, const S
 
     } else { // 浮動小数点を含む場合
         std::cout << "Note: a not integer action cost exists or the heuristic function's value is not integer" << std::endl;
-        R.solved = true;
-        R.plan.clear();
-        R.plan_cost = 0.0;
+
+        index_of.reserve(1 << 15);
+
+    #if !defined(USE_ROBIN_HOOD)
+    // robin_hood には setter の max_load_factor(float) がないため、非 robin_hood 時のみ設定
+        index_of.max_load_factor(0.50f);
+    #endif
+     
+        index_of.emplace(s0, 0);
+
+        struct MetaD{
+            double h;
+            bool closed;
+        };
+        std::vector<MetaD> meta;
+        meta.reserve(1 << 15);
+        meta.emplace_back(MetaD{0.0, false});
+
+        // open list (優先度付きキュー)
+        struct QEl { // Queue Element Structure
+            double h;
+            int id;
+        };
+
+        auto cmp = [](const QEl& a, const QEl& b) { // 比較関数
+            if (a.h != b.h) {
+                return a.h > b.h;
+            }
+        };
+
+        std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open(cmp);
+
+        meta[0] = MetaD{h(st, s0), false};
+        open.push({meta[0].h, 0});
+
+        StripsState work;
+        Undo undo;
+        constexpr double EPS = 1e-12;
+
+        while (!open.empty()) {
+            QEl cur = open.top();
+            open.pop();
+            const int u = cur.id;
+
+            StripsState su = R.nodes[u].s;
+
+            if (is_goal(st, su)) {
+                R.solved = true;
+                R.plan = extract_plan(R.nodes, u);
+                R.plan_cost = eval_plan_cost(st, R.plan);
+                return R;
+            }
+
+            meta[u].closed = true;
+
+            ++R.stats.expanded;
+            if (R.stats.expanded > p.max_expansions) {
+                break;
+            }
+
+            work = su;
+            undo.flipped.clear();
+            for (int a = 0; a < (int)st.actions.size(); ++a) {
+                const auto& act = st.actions[a];
+
+                if (!is_applicable(st, su, act)) {
+                    continue;
+                }
+
+                const std::size_t mark = undo_mark(undo);
+
+                UndoGuard ug{work, undo, mark};
+
+                apply_inplace(st, act, work, undo);
+                ++R.stats.generated;
+
+                auto it = index_of.find(work);
+                if (it == index_of.end()) {
+                    const int v = (int)R.nodes.size();
+                    R.nodes.push_back(Node{work, u, a});
+                    index_of.emplace(R.nodes[v].s, v);
+
+                    const double hv = h(st, R.nodes[v].s);
+
+                    if ((int)meta.size() <= v) {
+                        meta.resize(v << 1);
+                    }
+
+                    meta[v] = MetaD{hv, false};
+                    open.push({hv, v});
+                } else {
+                    ++R.stats.duplicates;
+                }
+            }
+        }
         return R;
     }
 
