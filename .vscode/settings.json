@@ -3,7 +3,7 @@
     "C_Cpp.default.intelliSenseMode": "linux-gcc-x64",
     "C_Cpp.default.compilerPath": "/usr/bin/g++",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-    "cmake.sourceDirectory": "/home/yuki_suzuki/planner_not_fd",
+    "cmake.sourceDirectory": "/home/yuki_suzuki/planner_research",
     "files.associations": {
         "memory": "cpp",
         "array": "cpp",
