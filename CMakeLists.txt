@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(planner_not_fd CXX)
+project(planner CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,11 +36,11 @@ target_include_directories(planner_search PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(planner_search PUBLIC USE_ROBIN_HOOD)
 
 # --- 実行ファイル ---
-add_executable(planner_not_fd src/main.cpp)
-target_link_libraries(planner_not_fd PRIVATE planner_search)
+add_executable(planner src/main.cpp)
+target_link_libraries(planner PRIVATE planner_search)
 
 if (UNIX)
-  target_link_libraries(planner_not_fd PRIVATE pthread)
+  target_link_libraries(planner PRIVATE pthread)
 endif()
 
 # --- テストケース ---
