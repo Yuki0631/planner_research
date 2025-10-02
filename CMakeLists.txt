@@ -3,6 +3,7 @@ project(planner CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -36,11 +37,16 @@ target_include_directories(planner_search PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(planner_search PUBLIC USE_ROBIN_HOOD)
 
 # SAS 形式のプランナ
-add_library(planner_sas STATIC
+add_library(sas_reader STATIC
     src/sas/sas_reader.cpp
+)
+target_include_directories(sas_reader PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+add_library(planner_sas_lib STATIC
     src/sas/sas_search.cpp
 )
-target_include_directories(planner_sas PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(planner_sas_lib PUBLIC sas_reader)
+target_include_directories(planner_sas_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
 
 # --- 実行ファイル ---
 # 自作プランナ
@@ -55,7 +61,7 @@ endif()
 add_executable(planner_sas
     src/sas/main.cpp
 )
-target_link_libraries(planner_sas PRIVATE planner_sas)
+target_link_libraries(planner_sas PRIVATE planner_sas_lib)
 
 if (UNIX)
   target_link_libraries(planner_sas PRIVATE pthread)
@@ -81,3 +87,7 @@ target_include_directories(grounding_generic_test PRIVATE ${CMAKE_SOURCE_DIR}/in
 add_executable(strips_test tests/strips_test.cpp)
 target_link_libraries(strips_test PRIVATE planner_strips)
 target_include_directories(strips_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
+
+add_executable(sas_reader_test tests/sas_reader_test.cpp)
+target_link_libraries(sas_reader_test PRIVATE sas_reader)
+target_include_directories(sas_reader_test PRIVATE ${CMAKE_SOURCE_DIR}/include)
