@@ -35,12 +35,30 @@ target_link_libraries(planner_search PUBLIC planner_strips)
 target_include_directories(planner_search PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(planner_search PUBLIC USE_ROBIN_HOOD)
 
+# SAS 形式のプランナ
+add_library(planner_sas STATIC
+    src/sas/sas_reader.cpp
+    src/sas/sas_search.cpp
+)
+target_include_directories(planner_sas PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
 # --- 実行ファイル ---
+# 自作プランナ
 add_executable(planner src/main.cpp)
 target_link_libraries(planner PRIVATE planner_search)
 
 if (UNIX)
   target_link_libraries(planner PRIVATE pthread)
+endif()
+
+# SAS 流用プランナ
+add_executable(planner_sas
+    src/sas/main.cpp
+)
+target_link_libraries(planner_sas PRIVATE planner_sas)
+
+if (UNIX)
+  target_link_libraries(planner_sas PRIVATE pthread)
 endif()
 
 # --- テストケース ---
