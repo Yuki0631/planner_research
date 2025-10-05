@@ -4,6 +4,7 @@
 #include <functional>
 #include <cstdint>
 #include "sas/sas_reader.hpp"
+#include "sas/sas_heuristic.hpp"
 
 namespace planner { namespace sas { // sas 
 
@@ -35,9 +36,6 @@ struct Params {
     uint64_t max_expansions = (1ull<<62);
     bool reopen_closed = true;
 };
-
-// ヒューリスティック型
-using HeuristicFn = std::function<double(const planner::sas::Task&, const State&)>;
 
 // --- ユーティリティ ---
 double eval_plan_cost(const planner::sas::Task& T, const std::vector<int>& plan);
