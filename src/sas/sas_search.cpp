@@ -1,6 +1,7 @@
 #include "sas/sas_search.hpp"
 #include "bucket_pq.hpp"
-#include <robin_hood.h>  
+#include <robin_hood.h>
+#include <atomic>
 #include <queue>
 #include <unordered_map>
 #include <cmath>
@@ -14,6 +15,20 @@ namespace planner { namespace sas {
 
 using Task = planner::sas::Task;
 using Operator = planner::sas::Operator;
+
+int g_mutex_mode = 0;
+enum { MUTEX_AUTO=0, MUTEX_ON=1, MUTEX_OFF=2 };
+
+static inline bool should_check_mutex_runtime(const Task& T) {
+    using namespace planner::sas;
+    if (g_mutex_mode == MUTEX_OFF) {
+        return false;
+    }
+    if (g_mutex_mode == MUTEX_ON)  {
+        return true;
+    }
+    return !T.mutexes.empty();
+}
 
 // ハッシュ／比較
 struct VecHash {
@@ -199,6 +214,16 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
     index_of.emplace(R.nodes[0].s, 0);
 
     if (all_action_costs_are_integers(T) && h_int) {
+        // 実際のモード表示
+        {
+            const bool do_mutex = should_check_mutex_runtime(T);
+            if (do_mutex) {
+                std::cout << "Mutex check: ON\n";
+            } else {
+                std::cout << "Mutex check: OFF\n";
+            }
+        }
+
         std::cout << "Note: all action costs are integers; using integer A* + BucketPQ.\n";
 
         struct MetaI { int g; int h; bool closed; };
@@ -251,8 +276,10 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                 ++R.stats.generated;
 
                 // 生成状態が mutex 違反なら捨てる
-                if (planner::sas::violates_mutex(T, work)) {
-                    continue;
+                if (should_check_mutex_runtime(T)) {
+                    if (planner::sas::violates_mutex(T, work)) {
+                        continue;
+                    }
                 }
 
                 const int w = rounding(op.cost);
@@ -310,6 +337,15 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         return R;
 
     } else {
+        {
+            const bool do_mutex = should_check_mutex_runtime(T);
+            if (do_mutex) {
+                std::cout << "Mutex check: ON\n";
+            } else {
+                std::cout << "Mutex check: OFF\n";
+            }
+        }
+
         std::cout << "Note: action costs are not all integers; using non-integer A*.\n";
 
         struct MetaD { double g; double h; bool closed; };
@@ -369,8 +405,10 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                 ++R.stats.generated;
 
                 // 生成状態が mutex 違反なら捨てる
-                if (planner::sas::violates_mutex(T, work)) {
-                    continue;
+                if (should_check_mutex_runtime(T)) {
+                    if (planner::sas::violates_mutex(T, work)) {
+                        continue;
+                    }
                 }
 
                 const double tentative_g = meta[u].g + op.cost;
@@ -437,6 +475,15 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
     const bool integer_mode = (all_action_costs_are_integers(T) && h_int);
 
+    {
+            const bool do_mutex = should_check_mutex_runtime(T);
+            if (do_mutex) {
+                std::cout << "Mutex check: ON\n";
+            } else {
+                std::cout << "Mutex check: OFF\n";
+            }
+    }
+
     if (integer_mode) {
         std::cout << "Note: all action costs and heuristic are integer; using BucketPQ GBFS.\n";
 
@@ -488,8 +535,10 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                 ++R.stats.generated;
 
                 // 生成状態が mutex 違反なら捨てる
-                if (planner::sas::violates_mutex(T, work)) {
-                    continue;
+                if (should_check_mutex_runtime(T)) {
+                    if (planner::sas::violates_mutex(T, work)) {
+                        continue;
+                    }
                 }
 
                 auto it = index_of.find(work);
@@ -559,9 +608,10 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                 apply_inplace(T, op, work, undo);
                 ++R.stats.generated;
 
-                // 生成状態が mutex 違反なら捨てる
-                if (planner::sas::violates_mutex(T, work)) {
-                    continue;
+                if (should_check_mutex_runtime(T)) {
+                    if (planner::sas::violates_mutex(T, work)) {
+                        continue;
+                    }
                 }
 
                 auto it = index_of.find(work);

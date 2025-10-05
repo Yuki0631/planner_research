@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <algorithm>
 #include <vector>
 #include <chrono>
 #include <iomanip>
@@ -15,6 +16,11 @@
 #include "sas/sas_heuristic.hpp"
 
 namespace fs = std::filesystem;
+
+namespace planner {namespace sas{
+    extern int g_mutex_mode;
+    enum { MUTEX_AUTO = 0, MUTEX_ON = 1, MUTEX_OFF = 2 };
+}}
 
 static std::string shell_quote(const std::string& s) {
     std::ostringstream o;
@@ -36,6 +42,7 @@ int main(int argc, char** argv) {
     //   [--h goalcount|blind]
     //   [--keep-sas]
     //   [--plan-out plans/plan.val]
+    //   [--check-mutex auto|on|off]
     //   [--val /path/to/validate]
     //   [--val-args "-v"]
     if (argc < 3) {
@@ -47,6 +54,7 @@ int main(int argc, char** argv) {
             "       [--h goalcount|blind]\n"
             "       [--keep-sas]\n"
             "       [--plan-out plans/plan.val]\n"
+            "       [--check-mutex auto|on|off]\n"
             "       [--val PATH_TO_VAL]\n"
             "       [--val-args \"...\"]\n";
         return 1;
@@ -61,6 +69,7 @@ int main(int argc, char** argv) {
     std::string hname = "goalcount";
     bool keep_sas = true;
     std::string plan_out = "plans/plan.val";
+    int mutex_mode = planner::sas::MUTEX_AUTO;
     std::string val_bin;
     std::string val_args;
 
@@ -78,6 +87,18 @@ int main(int argc, char** argv) {
             hname = argv[++i];
         } else if (a == "--plan-out" && i+1 < argc) {
             plan_out = argv[++i];
+        } else if (a == "--check-mutex" && i+1 < argc) {
+            std::string m = argv[++i];
+            std::transform(m.begin(), m.end(), m.begin(), [](unsigned char c){ return std::tolower(c); });
+            if (m == "auto") {
+                mutex_mode = planner::sas::MUTEX_AUTO;
+            } else if (m == "on") {
+                mutex_mode = planner::sas::MUTEX_ON;
+            } else if (m == "off") {
+                mutex_mode = planner::sas::MUTEX_OFF;
+            } else {
+                std::cerr << "warning: unknown --check-mutex value: " << m << " (use auto|on|off)\n";
+            }
         } else if (a == "--val" && i+1 < argc) {
             val_bin = argv[++i];
         } else if (a == "--val-args" && i+1 < argc) {
@@ -190,6 +211,11 @@ int main(int argc, char** argv) {
         planner::sas::Params P;
         bool h_is_integer = true;
 
+        {
+            using namespace planner::sas;
+            g_mutex_mode = mutex_mode;
+        }
+
         const auto t_search_begin = clock::now();
         planner::sas::Result R;
 
@@ -218,6 +244,9 @@ int main(int argc, char** argv) {
 
         if (R.solved) {
             std::cout << "Solution found.\n";
+            std::cout << "Expanded: " << R.stats.expanded << " state(s)" << "\n";
+            std::cout << "Generated: " << R.stats.generated << " state(s)" << "\n";
+
             // VAL形式のテキストを生成
             const std::string plan_txt = planner::sas::plan_to_val(T, R.plan);
             // ファイルに保存
