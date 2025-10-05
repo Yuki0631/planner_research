@@ -1,6 +1,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <iomanip>
 #include <cstdlib>
 #include <stdexcept>
 #include <filesystem>
@@ -50,7 +52,7 @@ int main(int argc, char** argv) {
     std::string fd = "containers/fast-downward.sif";
     std::string sas_path = "sas/output.sas";
     std::string hname = "goalcount";
-    bool keep_sas = true; // 既定で残す
+    bool keep_sas = true;
 
     for (int i=3; i<argc; ++i) {
         std::string a = argv[i];
@@ -70,6 +72,9 @@ int main(int argc, char** argv) {
     }
 
     try {
+        using clock = std::chrono::steady_clock;
+        const auto t_start = clock::now();
+
         // 出力先ディレクトリを作成
         if (!sas_path.empty()) {
             fs::path p(sas_path);
@@ -85,14 +90,19 @@ int main(int argc, char** argv) {
                 << " --translate"
                 << " --sas-file " << shell_quote(sas_path)
                 << " " << shell_quote(domain)
-                << " " << shell_quote(problem);
+                << " " << shell_quote(problem)
+                << " >/dev/null 2>&1";
 
-            std::cout << "[FD] " << cmd.str() << "\n";
+            std::cout << "[FD] running translate (output suppressed)\n";
+            const auto t_tr_begin = clock::now();
             int rc = std::system(cmd.str().c_str());
+            const auto t_tr_end = clock::now();
             if (rc != 0) {
                 std::cerr << "translator failed with exit code " << rc << "\n";
                 return 2;
             }
+            const auto tr_ms = std::chrono::duration<double, std::milli>(t_tr_end - t_tr_begin).count();
+            std::cout << std::fixed << std::setprecision(3) << "Translate Time: " << tr_ms << " ms\n";
         }
 
         // SASファイルが生成されたか確認
@@ -157,6 +167,7 @@ int main(int argc, char** argv) {
         planner::sas::Params P;
         bool h_is_integer = true;
 
+        const auto t_search_begin = clock::now();
         planner::sas::Result R;
 
 
@@ -180,12 +191,22 @@ int main(int argc, char** argv) {
             throw std::runtime_error(algo + std::string(" is not defined."));
         }
 
+        const auto t_search_end = clock::now();
+
         if (R.solved) {
             std::cout << "Solution found.\n";
             std::cout << planner::sas::plan_to_val(T, R.plan) << std::endl;
         } else {
             std::cout << "No solution.\n";
         }
+
+        // 時間表示（Search / Total）
+        const auto search_ms = std::chrono::duration<double, std::milli>(t_search_end - t_search_begin).count();
+        const auto t_end      = t_search_end;
+        const auto total_ms   = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+        std::cout << std::fixed << std::setprecision(3);
+        std::cout << "Search Time: " << search_ms << " ms\n"
+                  << "Total Planning Time: " << total_ms << " ms\n";
 
         if (!keep_sas) {
             std::error_code ec;
