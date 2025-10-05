@@ -101,6 +101,52 @@ int main(int argc, char** argv) {
         // SAS読込 → A*/GBFS
         planner::sas::Task T = planner::sas::read_file(sas_path);
 
+        // タスクのチェックを行う
+        {
+            const int nvars = (int)T.vars.size();
+            if ((int)T.init.size() != nvars) {
+                throw std::runtime_error("validate_task: init size mismatch: init="
+                    + std::to_string(T.init.size()) + " vars=" + std::to_string(nvars));
+            }
+            auto chk_var = [&](int v, const char* where){
+                if (v < 0 || v >= nvars) {
+                    throw std::runtime_error(std::string("validate_task: var OOB at ")
+                        + where + ": v=" + std::to_string(v) + " nvars=" + std::to_string(nvars));
+                }
+            };
+            auto chk_val = [&](int v, int val, const char* where){
+                chk_var(v, where);
+                int dom = T.vars[v].domain;
+                if (val < 0 || val >= dom) {
+                    throw std::runtime_error(std::string("validate_task: value OOB at ")
+                        + where + ": v=" + std::to_string(v)
+                        + " val=" + std::to_string(val) + " domain=" + std::to_string(dom));
+                }
+            };
+            // goal
+            for (auto [v,val] : T.goal) {
+                chk_val(v, val, "goal");
+            }
+            // operators
+            for (const auto& op : T.ops) {
+                for (auto [v,val] : op.prevail) {
+                    chk_val(v, val, (std::string("op.prevail: ") + op.name).c_str());
+                }
+                for (const auto& pp : op.pre_posts) {
+                    const auto& conds = std::get<0>(pp);
+                    int var = std::get<1>(pp);
+                    int pre = std::get<2>(pp);
+                    int post= std::get<3>(pp);
+                    for (auto [cv,cval] : conds) {
+                        chk_val(cv, cval, (std::string("op.cond: ") + op.name).c_str());
+                    }
+                    chk_var(var, (std::string("op.var: ") + op.name).c_str());
+                    if (pre  >= 0) chk_val(var, pre,  (std::string("op.pre: ")  + op.name).c_str());
+                    chk_val(var, post, (std::string("op.post: ") + op.name).c_str());
+                }
+            }
+        }
+
         planner::sas::Params P;
         auto goalcount = [](const planner::sas::Task& TT, const planner::sas::State& s)->double {
             int miss = 0;
