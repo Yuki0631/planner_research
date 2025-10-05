@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
     //   [--keep-sas]
     if (argc < 3) {
         std::cerr <<
-            "usage: planner_from_pddl <domain.pddl> <problem.pddl>\n"
+            "usage: planner_sas <domain.pddl> <problem.pddl>\n"
             "       [--algo astar|gbfs]\n"
             "       [--fd   PATH_TO_SIF]\n"
             "       [--sas-file sas/output.sas]\n"
