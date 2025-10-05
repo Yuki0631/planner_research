@@ -5,9 +5,11 @@
 #include <stdexcept>
 #include <filesystem>
 #include <sstream>
+#include <functional>
 
 #include "sas/sas_reader.hpp"
 #include "sas/sas_search.hpp"
+#include "sas/sas_heuristic.hpp"
 
 namespace fs = std::filesystem;
 
@@ -28,6 +30,7 @@ int main(int argc, char** argv) {
     //   [--algo astar|gbfs]
     //   [--fd containers/fast-downward.sif]
     //   [--sas-file sas/output.sas]
+    //   [--h goalcount|blind]
     //   [--keep-sas]
     if (argc < 3) {
         std::cerr <<
@@ -35,6 +38,7 @@ int main(int argc, char** argv) {
             "       [--algo astar|gbfs]\n"
             "       [--fd   PATH_TO_SIF]\n"
             "       [--sas-file sas/output.sas]\n"
+            "       [--h goalcount|blind]\n"
             "       [--keep-sas]\n";
         return 1;
     }
@@ -45,6 +49,7 @@ int main(int argc, char** argv) {
     std::string algo = "astar";
     std::string fd = "containers/fast-downward.sif";
     std::string sas_path = "sas/output.sas";
+    std::string hname = "goalcount";
     bool keep_sas = true; // 既定で残す
 
     for (int i=3; i<argc; ++i) {
@@ -57,6 +62,8 @@ int main(int argc, char** argv) {
             sas_path = argv[++i];
         } else if (a == "--keep-sas") {
             keep_sas = true;
+        } else if ((a == "--h" || a == "--heuristic") && i+1 < argc) {
+            hname = argv[++i];
         } else {
             std::cerr << "warning: unknown arg ignored: " << a << "\n";
         }
@@ -148,20 +155,30 @@ int main(int argc, char** argv) {
         }
 
         planner::sas::Params P;
-        auto goalcount = [](const planner::sas::Task& TT, const planner::sas::State& s)->double {
-            int miss = 0;
-            for (auto [v,val] : TT.goal) {
-                if (s[v] != val) {
-                    ++miss;
-                }
-            }
-            return (double)miss;
-        };
         bool h_is_integer = true;
 
-        planner::sas::Result R = (algo == "gbfs")
-            ? planner::sas::gbfs(T, goalcount, h_is_integer, P)
-            : planner::sas::astar(T, goalcount, h_is_integer, P);
+        planner::sas::Result R;
+
+
+        if (algo == "astar") {
+            if (hname == "goalcount") {
+                R = planner::sas::astar(T, planner::sas::goalcount(), h_is_integer, P);
+            } else if (hname == "blind") {
+                R = planner::sas::astar(T, planner::sas::blind(), h_is_integer, P);
+            } else {
+                throw std::runtime_error(hname + std::string(" is not defined."));
+            }
+        } else if (algo == "gbfs") {
+            if (hname == "goalcount") {
+                R = planner::sas::gbfs(T, planner::sas::goalcount(), h_is_integer, P);
+            } else if (hname == "blind") {
+                R = planner::sas::gbfs(T, planner::sas::blind(), h_is_integer, P);
+            } else {
+                throw std::runtime_error(hname + std::string(" is not defined."));
+            }
+        } else {
+            throw std::runtime_error(algo + std::string(" is not defined."));
+        }
 
         if (R.solved) {
             std::cout << "Solution found.\n";
