@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <sstream>
 #include <functional>
+#include <fstream>
 
 #include "sas/sas_reader.hpp"
 #include "sas/sas_search.hpp"
@@ -34,6 +35,9 @@ int main(int argc, char** argv) {
     //   [--sas-file sas/output.sas]
     //   [--h goalcount|blind]
     //   [--keep-sas]
+    //   [--plan-out plans/plan.val]
+    //   [--val /path/to/validate]
+    //   [--val-args "-v"]
     if (argc < 3) {
         std::cerr <<
             "usage: planner_sas <domain.pddl> <problem.pddl>\n"
@@ -41,7 +45,10 @@ int main(int argc, char** argv) {
             "       [--fd   PATH_TO_SIF]\n"
             "       [--sas-file sas/output.sas]\n"
             "       [--h goalcount|blind]\n"
-            "       [--keep-sas]\n";
+            "       [--keep-sas]\n"
+            "       [--plan-out plans/plan.val]\n"
+            "       [--val PATH_TO_VAL]\n"
+            "       [--val-args \"...\"]\n";
         return 1;
     }
 
@@ -53,6 +60,9 @@ int main(int argc, char** argv) {
     std::string sas_path = "sas/output.sas";
     std::string hname = "goalcount";
     bool keep_sas = true;
+    std::string plan_out = "plans/plan.val";
+    std::string val_bin;
+    std::string val_args;
 
     for (int i=3; i<argc; ++i) {
         std::string a = argv[i];
@@ -66,6 +76,12 @@ int main(int argc, char** argv) {
             keep_sas = true;
         } else if ((a == "--h" || a == "--heuristic") && i+1 < argc) {
             hname = argv[++i];
+        } else if (a == "--plan-out" && i+1 < argc) {
+            plan_out = argv[++i];
+        } else if (a == "--val" && i+1 < argc) {
+            val_bin = argv[++i];
+        } else if (a == "--val-args" && i+1 < argc) {
+            val_args = argv[++i];
         } else {
             std::cerr << "warning: unknown arg ignored: " << a << "\n";
         }
@@ -80,6 +96,13 @@ int main(int argc, char** argv) {
             fs::path p(sas_path);
             if (p.has_parent_path()) {
                 fs::create_directories(p.parent_path());
+            }
+        }
+
+         if (!plan_out.empty()) {
+            fs::path pp(plan_out);
+            if (pp.has_parent_path()) {
+                fs::create_directories(pp.parent_path());
             }
         }
 
@@ -195,7 +218,37 @@ int main(int argc, char** argv) {
 
         if (R.solved) {
             std::cout << "Solution found.\n";
-            std::cout << planner::sas::plan_to_val(T, R.plan) << std::endl;
+            // VAL形式のテキストを生成
+            const std::string plan_txt = planner::sas::plan_to_val(T, R.plan);
+            // ファイルに保存
+            if (!plan_out.empty()) {
+                std::ofstream ofs(plan_out, std::ios::binary);
+                if (!ofs) {
+                    throw std::runtime_error("failed to open plan file for write: " + plan_out);
+                }
+                ofs << plan_txt;
+                ofs.flush();
+                if (!ofs) {
+                    throw std::runtime_error("failed to write plan file: " + plan_out);
+                }
+                std::cout << "[PLAN] wrote: " << plan_out << "\n";
+            } else {
+                std::cout << plan_txt << std::endl;
+            }
+            // VALを実行（指定がある場合のみ）
+            if (!val_bin.empty() && !plan_out.empty()) {
+                std::ostringstream vcmd;
+                if (!val_args.empty()) {
+                    vcmd << shell_quote(val_bin) << " " << val_args
+                         << " " << shell_quote(domain) << " " << shell_quote(problem) << " " << shell_quote(plan_out);
+                } else {
+                    vcmd << shell_quote(val_bin)
+                         << " " << shell_quote(domain) << " " << shell_quote(problem) << " " << shell_quote(plan_out);
+                }
+                std::cout << "[VAL] " << vcmd.str() << "\n";
+                int vrc = std::system((vcmd.str() + " 2>&1").c_str());
+                std::cout << "[VAL] exit code: " << vrc << "\n";
+            }
         } else {
             std::cout << "No solution.\n";
         }
