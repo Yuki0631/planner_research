@@ -222,7 +222,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
             const int fu_now = meta[u].g + meta[u].h;
             if (fu != fu_now || hu != meta[u].h) continue;
 
-            const State& su = R.nodes[u].s;
+            const State su = R.nodes[u].s;
 
             if (is_goal(T, su)) {
                 R.solved = true;
@@ -337,7 +337,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
             const double fu_now = meta[u].g + meta[u].h;
             if (std::fabs(cur.f - fu_now) > EPS) continue;
 
-            const State& su = R.nodes[u].s;
+            const State su = R.nodes[u].s;
 
             if (is_goal(T, su)) {
                 R.solved = true;
@@ -456,7 +456,7 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         while (!open.empty()) {
             auto [id32, hu] = open.extract_min();
             const int u = static_cast<int>(id32);
-            const State& su = R.nodes[u].s;
+            const State su = R.nodes[u].s;
 
             if (is_goal(T, su)) {
                 R.solved = true;
@@ -530,7 +530,7 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         while (!open.empty()) {
             QEl cur = open.top(); open.pop();
             const int u = cur.id;
-            const State& su = R.nodes[u].s;
+            const State su = R.nodes[u].s;
 
             if (is_goal(T, su)) {
                 R.solved = true;
