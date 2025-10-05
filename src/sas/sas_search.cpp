@@ -58,9 +58,10 @@ std::string plan_to_val(const Task& T, const std::vector<int>& plan) {
     std::ostringstream oss;
     for (std::size_t i=0;i<plan.size();++i) {
         if (i) oss << "\n";
-        oss << T.ops[plan[i]].name;
+        oss << "(" << T.ops[plan[i]].name << ")";
     }
-    oss << "\n; cost = " << std::setprecision(17) << eval_plan_cost(T, plan) << "\n";
+    oss << "\n; cost = " << std::setprecision(17) << eval_plan_cost(T, plan);
+    oss << "\n; length = " << plan.size() << "\n";
     return oss.str();
 }
 
