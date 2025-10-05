@@ -48,6 +48,7 @@ add_library(planner_sas_lib STATIC
 )
 target_link_libraries(planner_sas_lib PUBLIC sas_reader)
 target_include_directories(planner_sas_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
+target_compile_definitions(planner_sas_lib PUBLIC USE_ROBIN_HOOD)
 
 # --- 実行ファイル ---
 # 自作プランナ
