@@ -36,6 +36,7 @@ static std::string shell_quote(const std::string& s) {
 int main(int argc, char** argv) {
     // 使い方
     // planner_from_pddl <domain.pddl> <problem.pddl>
+    //   [--only-search]
     //   [--algo astar|gbfs]
     //   [--fd containers/fast-downward.sif]
     //   [--sas-file sas/output.sas]
@@ -48,6 +49,7 @@ int main(int argc, char** argv) {
     if (argc < 3) {
         std::cerr <<
             "usage: planner_sas <domain.pddl> <problem.pddl>\n"
+            "       [--only-search]\n"
             "       [--algo astar|gbfs]\n"
             "       [--fd   PATH_TO_SIF]\n"
             "       [--sas-file sas/output.sas]\n"
@@ -63,6 +65,7 @@ int main(int argc, char** argv) {
     std::string domain = argv[1];
     std::string problem = argv[2];
 
+    bool only_search = false;
     std::string algo = "astar";
     std::string fd = "containers/fast-downward.sif";
     std::string sas_path = "sas/output.sas";
@@ -77,6 +80,8 @@ int main(int argc, char** argv) {
         std::string a = argv[i];
         if (a == "--algo" && i+1 < argc) {
             algo = argv[++i];
+        } else if (a == "--only-search" && i+1 < argc) {
+            only_search = true;
         } else if (a == "--fd" && i+1 < argc) {
             fd = argv[++i];
         } else if (a == "--sas-file" && i+1 < argc) {
@@ -128,35 +133,37 @@ int main(int argc, char** argv) {
         }
 
         // FDのtranslatorを呼ぶ
-        {
-            std::ostringstream cmd;
-            cmd << shell_quote(fd)
-                << " --translate"
-                << " --sas-file " << shell_quote(sas_path)
-                << " " << shell_quote(domain)
-                << " " << shell_quote(problem)
-                << " >/dev/null 2>&1";
+        if (!only_search) {
+            {
+                std::ostringstream cmd;
+                cmd << shell_quote(fd)
+                    << " --translate"
+                    << " --sas-file " << shell_quote(sas_path)
+                    << " " << shell_quote(domain)
+                    << " " << shell_quote(problem)
+                    << " >/dev/null 2>&1";
 
-            std::cout << "[FD] running translate (output suppressed)\n";
-            const auto t_tr_begin = clock::now();
-            int rc = std::system(cmd.str().c_str());
-            const auto t_tr_end = clock::now();
-            if (rc != 0) {
-                std::cerr << "translator failed with exit code " << rc << "\n";
+                std::cout << "[FD] running translate (output suppressed)\n";
+                const auto t_tr_begin = clock::now();
+                int rc = std::system(cmd.str().c_str());
+                const auto t_tr_end = clock::now();
+                if (rc != 0) {
+                    std::cerr << "translator failed with exit code " << rc << "\n";
+                    return 2;
+                }
+                const auto tr_ms = std::chrono::duration<double, std::milli>(t_tr_end - t_tr_begin).count();
+                std::cout << std::fixed << std::setprecision(3) << "Translate Time: " << tr_ms << " ms\n";
+            }
+
+            // SASファイルが生成されたか確認
+            if (!fs::exists(sas_path)) {
+                std::cerr << "error: SAS file not found: " << sas_path << "\n";
                 return 2;
             }
-            const auto tr_ms = std::chrono::duration<double, std::milli>(t_tr_end - t_tr_begin).count();
-            std::cout << std::fixed << std::setprecision(3) << "Translate Time: " << tr_ms << " ms\n";
-        }
-
-        // SASファイルが生成されたか確認
-        if (!fs::exists(sas_path)) {
-            std::cerr << "error: SAS file not found: " << sas_path << "\n";
-            return 2;
-        }
-        if (fs::file_size(sas_path) == 0) {
-            std::cerr << "error: SAS file is empty: " << sas_path << "\n";
-            return 2;
+            if (fs::file_size(sas_path) == 0) {
+                std::cerr << "error: SAS file is empty: " << sas_path << "\n";
+                return 2;
+            }
         }
 
         // SAS読込 → A*/GBFS
