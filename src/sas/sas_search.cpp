@@ -493,15 +493,15 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
     if (integer_mode) {
         std::cout << "Note: all action costs and heuristic are integer; using BucketPQ GBFS.\n";
 
-        struct MetaI { int h; bool closed; };
-        std::vector<MetaI> meta(1, MetaI{0,false});
+        struct MetaI { int g; int h; bool closed; };
+        std::vector<MetaI> meta(1, MetaI{0, 0, false});
 
-        BucketPQ open;
+        TwoLevelBucketPQ open;
 
         const int h0 = rounding(h(T, s0));
         ++R.stats.evaluated;
-        meta[0] = MetaI{h0, false};
-        open.insert(0, h0);
+        meta[0] = MetaI{0, h0, false};
+        open.insert(0, pack_fh_asc(h0, 0)); // pack_fh means pack_hg here 
 
         State work;
         Undo undo;
@@ -509,8 +509,11 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         undo.clear();
 
         while (!open.empty()) {
-            auto [id32, hu] = open.extract_min();
+            auto [id32, key] = open.extract_min();
             const int u = static_cast<int>(id32);
+            const int hu = unpack_f(key);
+            const int gu = unpack_h(key);
+
             const State su = R.nodes[u].s;
 
             if (is_goal(T, su)) {
@@ -556,11 +559,13 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
                     const int hv = rounding(h(T, R.nodes[v].s));
                     ++R.stats.evaluated;
+
                     if ((int)meta.size() <= v) {
                         meta.resize(v<<1);
                     }
-                    meta[v] = MetaI{hv, false};
-                    open.insert(static_cast<uint32_t>(v), static_cast<uint32_t>(hv));
+                    const int gv = meta[u].g + rounding(op.cost);
+                    meta[v] = MetaI{gv, hv, false};
+                    open.insert(static_cast<uint32_t>(v), pack_fh_asc(hv, gv));
                 } else {
                     ++R.stats.duplicates;
                 }
@@ -571,23 +576,27 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
     } else {
         std::cout << "Note: heuristic or costs are non-integer; using std::priority_queue GBFS.\n";
 
-        struct MetaD { double h; bool closed; };
-        std::vector<MetaD> meta(1, MetaD{0.0, false});
+        struct MetaD { double h; double g; bool closed; };
+        std::vector<MetaD> meta(1, MetaD{0.0, 0.0, false});
 
-        struct QEl { double h; int id; };
+        struct QEl { double h; double g; int id; };
         auto cmp = [](const QEl& a, const QEl& b){
-            return a.h > b.h;
+            if (a.h != b.h) {
+                return a.h > b.h;
+                return a.g > b.g;
+            }
         };
         std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open(cmp);
 
-        meta[0] = MetaD{ h(T,s0), false };
+        meta[0] = MetaD{ h(T,s0), 0.0, false };
         ++R.stats.evaluated;
-        open.push({ meta[0].h, 0 });
+        open.push({ meta[0].h, meta[0].g, 0 });
 
         State work; Undo undo; work = s0; undo.clear();
 
         while (!open.empty()) {
-            QEl cur = open.top(); open.pop();
+            QEl cur = open.top();
+            open.pop();
             const int u = cur.id;
             const State su = R.nodes[u].s;
 
@@ -634,8 +643,9 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                     if ((int)meta.size() <= v) {
                         meta.resize(v<<1);
                     }
-                    meta[v] = MetaD{hv, false};
-                    open.push({ hv, v });
+                    const double gv = meta[u].g + op.cost;
+                    meta[v] = MetaD{hv, gv, false};
+                    open.push({ hv, gv, v });
                 } else {
                     ++R.stats.duplicates;
                 }
