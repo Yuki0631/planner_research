@@ -231,6 +231,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
         TwoLevelBucketPQ open;
         const int h0 = rounding(h(T, s0));
+        ++R.stats.evaluated;
         meta[0] = MetaI{0, h0, false};
         open.insert(0, pack_fh_asc(h0, h0));
 
@@ -292,6 +293,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                     index_of.emplace(R.nodes[v].s, v);
 
                     const int hv = rounding(h(T, R.nodes[v].s));
+                    ++R.stats.evaluated;
                     if ((int)meta.size() <= v) meta.resize(v+1);
                     meta[v] = MetaI{tentative_g, hv, false};
 
@@ -304,6 +306,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                         R.nodes[v].act_id = a;
 
                         meta[v].h = rounding(h(T, R.nodes[v].s));
+                        ++R.stats.evaluated;
                         const UKey new_key = pack_fh_asc(meta[v].g + meta[v].h, meta[v].h);
 
                         if (meta[v].closed) {
@@ -359,6 +362,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open(cmp);
 
         meta[0] = MetaD{0.0, h(T, s0), false};
+        ++R.stats.evaluated;
         open.push({ meta[0].g + meta[0].h, meta[0].h, 0 });
 
         State work;
@@ -420,6 +424,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                     index_of.emplace(R.nodes[v].s, v);
 
                     const double hv = h(T, R.nodes[v].s);
+                    ++R.stats.evaluated;
                     if ((int)meta.size() <= v) {
                         meta.resize(v+1);
                     }
@@ -433,6 +438,7 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                         R.nodes[v].act_id = a;
 
                         meta[v].h = h(T, R.nodes[v].s);
+                        ++R.stats.evaluated;
                         if (meta[v].closed && !p.reopen_closed) {
                             ++R.stats.duplicates;
                             continue;
@@ -493,6 +499,7 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         BucketPQ open;
 
         const int h0 = rounding(h(T, s0));
+        ++R.stats.evaluated;
         meta[0] = MetaI{h0, false};
         open.insert(0, h0);
 
@@ -548,6 +555,7 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                     index_of.emplace(R.nodes[v].s, v);
 
                     const int hv = rounding(h(T, R.nodes[v].s));
+                    ++R.stats.evaluated;
                     if ((int)meta.size() <= v) {
                         meta.resize(v<<1);
                     }
@@ -573,6 +581,7 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open(cmp);
 
         meta[0] = MetaD{ h(T,s0), false };
+        ++R.stats.evaluated;
         open.push({ meta[0].h, 0 });
 
         State work; Undo undo; work = s0; undo.clear();
@@ -621,6 +630,7 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                     index_of.emplace(R.nodes[v].s, v);
 
                     const double hv = h(T, R.nodes[v].s);
+                    ++R.stats.evaluated;
                     if ((int)meta.size() <= v) {
                         meta.resize(v<<1);
                     }

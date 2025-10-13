@@ -19,6 +19,7 @@ struct Node {
 struct Stats {
     uint64_t expanded = 0;
     uint64_t generated = 0;
+    uint64_t evaluated = 0;
     uint64_t duplicates = 0;
 };
 

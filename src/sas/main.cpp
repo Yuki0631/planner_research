@@ -253,6 +253,7 @@ int main(int argc, char** argv) {
             std::cout << "Solution found.\n";
             std::cout << "Expanded: " << R.stats.expanded << " state(s)" << "\n";
             std::cout << "Generated: " << R.stats.generated << " state(s)" << "\n";
+            std::cout << "Evaluated: " << R.stats.evaluated << " state(s)" << "\n";
 
             // VAL形式のテキストを生成
             const std::string plan_txt = planner::sas::plan_to_val(T, R.plan);
