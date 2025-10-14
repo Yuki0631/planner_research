@@ -603,17 +603,26 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                 return a.g > b.g;
             }
         };
-        std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open(cmp);
+        std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open_pref(cmp);
+        std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open_norm(cmp);
 
         meta[0] = MetaD{ h(T,s0), 0.0, false };
         ++R.stats.evaluated;
-        open.push({ meta[0].h, meta[0].g, 0 });
+        open_norm.push({ meta[0].h, meta[0].g, 0 });
 
         State work; Undo undo; work = s0; undo.clear();
 
-        while (!open.empty()) {
-            QEl cur = open.top();
-            open.pop();
+        while (!open_pref.empty() || !open_norm.empty()) {
+            QEl cur;
+
+            if (!open_pref.empty()) {
+                cur = open_pref.top();
+                open_pref.pop();
+            } else {
+                cur = open_norm.top();
+                open_norm.pop();
+            }
+
             const int u = cur.id;
             const State su = R.nodes[u].s;
 
@@ -657,14 +666,21 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
                     const double hv = h(T, R.nodes[v].s);
                     ++R.stats.evaluated;
+                    const bool is_preferred = (hv < meta[u].h);
+
                     if ((int)meta.size() <= v) {
                         meta.resize(v<<1);
                     }
                     const double gv = meta[u].g + op.cost;
                     meta[v] = MetaD{hv, gv, false};
-                    open.push({ hv, gv, v });
+                    if (is_preferred) {
+                        open_pref.push({ hv, gv, v });
+                    } else {
+                        open_norm.push({ hv, gv, v });
+                    }
                 } else {
                     ++R.stats.duplicates;
+                    continue;
                 }
             }
         }
