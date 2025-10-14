@@ -151,8 +151,8 @@ int main(int argc, char** argv) {
                     std::cerr << "translator failed with exit code " << rc << "\n";
                     return 2;
                 }
-                const auto tr_ms = std::chrono::duration<double, std::milli>(t_tr_end - t_tr_begin).count();
-                std::cout << std::fixed << std::setprecision(3) << "Translate Time: " << tr_ms << " ms\n";
+                const auto tr_s = std::chrono::duration<double>(t_tr_end - t_tr_begin).count();
+                std::cout << std::fixed << std::setprecision(3) << "Translate Time: " << tr_s << " s\n";
             }
 
             // SASファイルが生成されたか確認
@@ -299,12 +299,12 @@ int main(int argc, char** argv) {
         }
 
         // 時間表示（Search / Total）
-        const auto search_ms = std::chrono::duration<double, std::milli>(t_search_end - t_search_begin).count();
+        const auto search_ms = std::chrono::duration<double>(t_search_end - t_search_begin).count();
         const auto t_end      = t_search_end;
-        const auto total_ms   = std::chrono::duration<double, std::milli>(t_end - t_start).count();
+        const auto total_ms   = std::chrono::duration<double>(t_end - t_start).count();
         std::cout << std::fixed << std::setprecision(3);
-        std::cout << "Search Time: " << search_ms << " ms\n"
-                  << "Total Planning Time: " << total_ms << " ms\n";
+        std::cout << "Search Time: " << search_ms << " s\n"
+                  << "Total Planning Time: " << total_ms << " s\n";
 
         if (!keep_sas) {
             std::error_code ec;
