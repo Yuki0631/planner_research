@@ -274,7 +274,9 @@ int main(int argc, char** argv) {
             }
             // VALを実行（指定がある場合のみ）
             if (!val_bin.empty() && !plan_out.empty()) {
+
                 std::ostringstream vcmd;
+
                 if (!val_args.empty()) {
                     vcmd << shell_quote(val_bin) << " " << val_args
                          << " " << shell_quote(domain) << " " << shell_quote(problem) << " " << shell_quote(plan_out);
@@ -282,10 +284,14 @@ int main(int argc, char** argv) {
                     vcmd << shell_quote(val_bin)
                          << " " << shell_quote(domain) << " " << shell_quote(problem) << " " << shell_quote(plan_out);
                 }
-                int vrc = std::system((vcmd.str() + " >/dev/null 2>&1").c_str());
+
+                int vrc = system((vcmd.str() + " >/dev/null 2>&1").c_str());
+
                 if (vrc == 0) {
                     const auto cost = planner::sas::eval_plan_cost(T, R.plan);
                     std::cout << "[VAL] Plan valid (cost=" << cost << ")\n";
+                } else {
+                    std::cout << "[VAL] Validation failed (exit=" << vrc << ")\n";
                 }
             }
         } else {
