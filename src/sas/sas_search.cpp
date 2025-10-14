@@ -496,20 +496,30 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         struct MetaI { int g; int h; bool closed; };
         std::vector<MetaI> meta(1, MetaI{0, 0, false});
 
-        TwoLevelBucketPQ open;
+        TwoLevelBucketPQ open_pref; // preferred
+        TwoLevelBucketPQ open_norm; // not-preferred
 
         const int h0 = rounding(h(T, s0));
         ++R.stats.evaluated;
         meta[0] = MetaI{0, h0, false};
-        open.insert(0, pack_fh_asc(h0, 0)); // pack_fh means pack_hg here 
+        open_norm.insert(0, pack_fh_asc(h0, 0)); // pack_fh means pack_hg here, 初期状態では、not-preferred 
 
         State work;
         Undo undo;
         work = s0;
         undo.clear();
 
-        while (!open.empty()) {
-            auto [id32, key] = open.extract_min();
+        while (!open_pref.empty() || !open_norm.empty()) {
+
+            // open_pref があればそこから pop() し、なければ open_norm から pop() する関数
+            auto pick = [&]() {
+                if (!open_pref.empty()) {
+                    return open_pref.extract_min();
+                }
+                return open_norm.extract_min();
+            };
+
+            auto [id32, key] = pick();
             const int u = static_cast<int>(id32);
             const int hu = unpack_f(key);
             const int gu = unpack_h(key);
@@ -553,21 +563,28 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
                 auto it = index_of.find(work);
                 if (it == index_of.end()) {
+                    const int hv = rounding(h(T, work));
+                    ++R.stats.evaluated;
+                    const bool is_preferred = (hv < meta[u].h);
+
                     const int v = (int)R.nodes.size();
                     R.nodes.push_back(Node{work, u, a});
                     index_of.emplace(R.nodes[v].s, v);
 
-                    const int hv = rounding(h(T, R.nodes[v].s));
-                    ++R.stats.evaluated;
 
                     if ((int)meta.size() <= v) {
                         meta.resize(v<<1);
                     }
                     const int gv = meta[u].g + rounding(op.cost);
                     meta[v] = MetaI{gv, hv, false};
-                    open.insert(static_cast<uint32_t>(v), pack_fh_asc(hv, gv));
+                    if (is_preferred) {
+                        open_pref.insert(static_cast<uint32_t>(v), pack_fh_asc(hv, gv));
+                    } else {
+                        open_norm.insert(static_cast<uint32_t>(v), pack_fh_asc(hv, gv));
+                    }
                 } else {
                     ++R.stats.duplicates;
+                    continue;
                 }
             }
         }
