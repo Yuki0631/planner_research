@@ -63,6 +63,7 @@
         "span": "cpp",
         "sstream": "cpp",
         "variant": "cpp",
-        "cinttypes": "cpp"
+        "cinttypes": "cpp",
+        "csignal": "cpp"
     }
 }

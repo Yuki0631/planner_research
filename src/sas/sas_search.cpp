@@ -248,7 +248,8 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
         while (!open.empty()) {
             if (planner::sas::time_exceeded_cpu()) {
-                break;
+                std::cerr << "error: CPU time limit exceeded (" << planner::sas::g_cpu_limit_sec << " sec)\n";
+                std::exit(101);
             }
 
             auto [u32, key] = open.extract_min();
@@ -383,7 +384,8 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
         while (!open.empty()) {
             if (planner::sas::time_exceeded_cpu()) {
-                break;
+                std::cerr << "error: CPU time limit exceeded (" << planner::sas::g_cpu_limit_sec << " sec)\n";
+                std::exit(101);
             }
             QEl cur = open.top(); open.pop();
             const int u = cur.id;
@@ -524,7 +526,8 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
         while (!open_pref.empty() || !open_norm.empty()) {
             if (planner::sas::time_exceeded_cpu()) {
-                break;
+                std::cerr << "error: CPU time limit exceeded (" << planner::sas::g_cpu_limit_sec << " sec)\n";
+                std::exit(101);
             }
 
             // open_pref があればそこから pop() し、なければ open_norm から pop() する関数
@@ -630,7 +633,8 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
 
         while (!open_pref.empty() || !open_norm.empty()) {
             if (planner::sas::time_exceeded_cpu()) {
-                break;
+                std::cerr << "error: CPU time limit exceeded (" << planner::sas::g_cpu_limit_sec << " sec)\n";
+                std::exit(101);
             }
             QEl cur;
 

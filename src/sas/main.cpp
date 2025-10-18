@@ -370,6 +370,9 @@ int main(int argc, char** argv) {
             fs::remove(sas_path, ec);
         }
         return R.solved ? 0 : 3;
+    } catch (const std::bad_alloc&) {
+        std::cerr << "fatal: memory limit exceeded (bad_alloc)\n";
+        return 102; // memory limit
     } catch (const std::exception& e) {
         std::cerr << "fatal: " << e.what() << "\n";
         return 9;
