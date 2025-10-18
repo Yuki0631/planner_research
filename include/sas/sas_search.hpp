@@ -72,8 +72,6 @@ inline bool time_exceeded_cpu() {
     const double now = cpu_seconds();
     if (now - g_cpu_start_sec >= g_cpu_limit_sec) { // 許容時間を超えていた場合
         g_search_timed_out.store(true, std::memory_order_relaxed);
-        std::cout << now - g_cpu_start_sec  << std::endl;
-        std::cout << g_cpu_limit_sec << std::endl;
         return true;
     }
     return false;
