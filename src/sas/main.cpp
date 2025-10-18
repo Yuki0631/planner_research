@@ -15,6 +15,12 @@
 #include "sas/sas_search.hpp"
 #include "sas/sas_heuristic.hpp"
 
+#include <csignal>
+#if defined(__linux__)
+   #include <sys/resource.h>
+   #include <sys/time.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace planner {namespace sas{
@@ -38,6 +44,8 @@ int main(int argc, char** argv) {
     // planner_from_pddl <domain.pddl> <problem.pddl>
     //   [--only-search]
     //   [--algo astar|gbfs]
+    //   [--search-cpu-limit int(second)]
+    //   [--search-mem-limit-mb int(MB)]
     //   [--fd containers/fast-downward.sif]
     //   [--sas-file sas/output.sas]
     //   [--h goalcount|blind]
@@ -51,6 +59,8 @@ int main(int argc, char** argv) {
             "usage: planner_sas <domain.pddl> <problem.pddl>\n"
             "       [--only-search]\n"
             "       [--algo astar|gbfs]\n"
+            "       [--search-cpu-limit int(second)]\n"
+            "       [--search-mem-limit-mb int(MB)]\n"
             "       [--fd   PATH_TO_SIF]\n"
             "       [--sas-file sas/output.sas]\n"
             "       [--h goalcount|blind]\n"
@@ -76,12 +86,22 @@ int main(int argc, char** argv) {
     std::string val_bin;
     std::string val_args;
 
+    // cpu-time & memory audit
+    double opt_search_cpu_limit_sec = -1.0; // CPU 時間上限 (negative means invalid)
+    std::size_t opt_search_mem_limit_mb = 0; // 仮想メモリ上限 (zero means invalid)
+
     for (int i=3; i<argc; ++i) {
         std::string a = argv[i];
         if (a == "--algo" && i+1 < argc) {
             algo = argv[++i];
         } else if (a == "--only-search" && i+1 < argc) {
             only_search = true;
+        } else if (a == "--search-cpu-limit" && i + 1 < argc) {
+            opt_search_cpu_limit_sec = std::stod(argv[++i]);
+            continue;
+        } else if (a == "--search-mem-limit-mb" && i + 1 < argc) {
+            opt_search_mem_limit_mb = static_cast<std::size_t>(std::stoull(argv[++i]));
+            continue;
         } else if (a == "--fd" && i+1 < argc) {
             fd = argv[++i];
         } else if (a == "--sas-file" && i+1 < argc) {
@@ -223,9 +243,33 @@ int main(int argc, char** argv) {
             g_mutex_mode = mutex_mode;
         }
 
-        const auto t_search_begin = clock::now();
         planner::sas::Result R;
 
+        // メモリ制限
+    #if defined(__linux__)
+        rlimit saved_as{}, saved_data{}; // リソース制限の保持、as はアドレス空間 (仮想メモリ空間) 、data はデータセグメント (ヒープ領域)
+        bool saved_as_ok = false, saved_data_ok = false; // 取得に成功したかどうか
+        if (opt_search_mem_limit_mb > 0) {
+            // 現在のプロセスのメモリ制限を取得する
+            if (getrlimit(RLIMIT_AS, &saved_as) == 0) {
+                saved_as_ok = true;
+            }
+            if (getrlimit(RLIMIT_DATA, &saved_data) == 0) {
+                saved_data_ok = true;
+            }
+            rlimit rl{}; // 新しいリソース制限値の設定
+            rl.rlim_cur = rl.rlim_max = static_cast<rlim_t>(opt_search_mem_limit_mb) * 1024 * 1024;
+            // その制限をシステムに反映させる
+            (void)setrlimit(RLIMIT_AS, &rl);
+            (void)setrlimit(RLIMIT_DATA, &rl);
+        }
+    #endif
+    
+        // CPU バジェットの設定
+        planner::sas::g_cpu_budget_enabled = true;
+        planner::sas::set_search_cpu_budget(opt_search_cpu_limit_sec);
+
+        const auto t_search_begin = clock::now();
 
         if (algo == "astar") {
             if (hname == "goalcount") {
@@ -248,6 +292,21 @@ int main(int argc, char** argv) {
         }
 
         const auto t_search_end = clock::now();
+
+        // CPU バジェットの解除
+        planner::sas::set_search_cpu_budget(-1.0);
+
+        // メモリ上限の復元
+    #if defined(__linux__)
+        if (opt_search_mem_limit_mb > 0) {
+            if (saved_as_ok) {
+                (void)setrlimit(RLIMIT_AS, &saved_as);
+            }
+            if (saved_data_ok) {
+                (void)setrlimit(RLIMIT_DATA, &saved_data);
+            }
+        }
+    #endif
 
         if (R.solved) {
             std::cout << "Solution found.\n";

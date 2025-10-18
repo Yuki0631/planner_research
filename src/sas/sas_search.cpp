@@ -186,6 +186,12 @@ struct UndoGuard {
     ~UndoGuard() { undo_to(work, undo, mark); }
 };
 
+// CPU 時間の audit の設定
+std::atomic<bool> g_search_timed_out{false};
+bool g_cpu_budget_enabled = true;
+double g_cpu_limit_sec = -1.0;
+double g_cpu_start_sec = 0.0;
+
 // A* search
 Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
     Result R;
@@ -241,6 +247,10 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         undo.clear();
 
         while (!open.empty()) {
+            if (planner::sas::time_exceeded_cpu()) {
+                break;
+            }
+
             auto [u32, key] = open.extract_min();
             const int u = static_cast<int>(u32);
             const int fu = unpack_f(key);
@@ -372,6 +382,9 @@ Result astar(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         constexpr double EPS = 1e-12;
 
         while (!open.empty()) {
+            if (planner::sas::time_exceeded_cpu()) {
+                break;
+            }
             QEl cur = open.top(); open.pop();
             const int u = cur.id;
 
@@ -510,6 +523,9 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         undo.clear();
 
         while (!open_pref.empty() || !open_norm.empty()) {
+            if (planner::sas::time_exceeded_cpu()) {
+                break;
+            }
 
             // open_pref があればそこから pop() し、なければ open_norm から pop() する関数
             auto pick = [&]() {
@@ -613,6 +629,9 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         State work; Undo undo; work = s0; undo.clear();
 
         while (!open_pref.empty() || !open_norm.empty()) {
+            if (planner::sas::time_exceeded_cpu()) {
+                break;
+            }
             QEl cur;
 
             if (!open_pref.empty()) {
