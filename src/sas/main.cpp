@@ -15,6 +15,8 @@
 #include "sas/sas_search.hpp"
 #include "sas/sas_heuristic.hpp"
 
+#include "sas/parallel_SOC/parallel_search.hpp"
+
 #include <csignal>
 #if defined(__linux__)
    #include <sys/resource.h>

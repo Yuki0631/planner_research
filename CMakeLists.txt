@@ -11,6 +11,18 @@ endif()
 
 add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wconversion -O3 -march=native)
 
+# --- Sanitizers (Debug) ---
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  # 明示的に切り替えたい場合は -DSANITIZE=asan 等を指定する
+  if (DEFINED SANITIZE AND SANITIZE STREQUAL "asan")
+    add_compile_options(-fsanitize=address,undefined)
+    add_link_options(-fsanitize=address,undefined)
+  else()
+    add_compile_options(-fsanitize=thread)
+    add_link_options(-fsanitize=thread)
+  endif()
+endif()
+
 # --- ライブラリ ---
 # ヘッダ
 include_directories(${CMAKE_SOURCE_DIR}/include)
@@ -50,6 +62,20 @@ target_link_libraries(planner_sas_lib PUBLIC sas_reader)
 target_include_directories(planner_sas_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
 target_compile_definitions(planner_sas_lib PUBLIC USE_ROBIN_HOOD)
 
+# --- SAS parallel_SOC（最小・空実装をまとめた静的ライブラリ）---
+add_library(sas_parallel_soc STATIC
+    src/sas/parallel_SOC/closed_table.cpp
+    src/sas/parallel_SOC/expander.cpp
+    src/sas/parallel_SOC/parallel_search.cpp
+    src/sas/parallel_SOC/shared_open_list.cpp
+    src/sas/parallel_SOC/termination.cpp
+    src/sas/parallel_SOC/thread_pool.cpp
+)
+target_include_directories(sas_parallel_soc PUBLIC ${CMAKE_SOURCE_DIR}/include)
+if (UNIX)
+  target_link_libraries(sas_parallel_soc PUBLIC pthread)
+endif()
+
 # --- 実行ファイル ---
 # 自作プランナ
 add_executable(planner src/main.cpp)
@@ -63,7 +89,7 @@ endif()
 add_executable(planner_sas
     src/sas/main.cpp
 )
-target_link_libraries(planner_sas PRIVATE planner_sas_lib)
+target_link_libraries(planner_sas PRIVATE planner_sas_lib sas_parallel_soc)
 
 if (UNIX)
   target_link_libraries(planner_sas PRIVATE pthread)
