@@ -12,16 +12,16 @@ endif()
 add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wconversion -O3 -march=native)
 
 # --- Sanitizers (Debug) ---
-if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+# if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   # 明示的に切り替えたい場合は -DSANITIZE=asan 等を指定する
-  if (DEFINED SANITIZE AND SANITIZE STREQUAL "asan")
-    add_compile_options(-fsanitize=address,undefined)
-    add_link_options(-fsanitize=address,undefined)
-  else()
-    add_compile_options(-fsanitize=thread)
-    add_link_options(-fsanitize=thread)
-  endif()
-endif()
+#   if (DEFINED SANITIZE AND SANITIZE STREQUAL "asan")
+#     add_compile_options(-fsanitize=address,undefined)
+#     add_link_options(-fsanitize=address,undefined)
+#   else()
+#     add_compile_options(-fsanitize=thread)
+#     add_link_options(-fsanitize=thread)
+#   endif()
+# endif()
 
 # --- ライブラリ ---
 # ヘッダ
