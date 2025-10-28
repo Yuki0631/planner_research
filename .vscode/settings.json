@@ -64,6 +64,9 @@
         "sstream": "cpp",
         "variant": "cpp",
         "cinttypes": "cpp",
-        "csignal": "cpp"
+        "csignal": "cpp",
+        "semaphore": "cpp",
+        "stop_token": "cpp",
+        "thread": "cpp"
     }
 }
