@@ -41,6 +41,9 @@ struct Params {
     // BucketPQ 用パラメータ
     float bucket_delta = 1.0f;
     uint32_t buckets_window = 256;
+    uint32_t bucket_shards = 0;
+    uint32_t bucket_select_k = 2;
+    bool bucket_fifo = true;
 
     // スレッドアフィニティ（UMA なので既定は false とする）
     bool pin_threads = false;
@@ -61,11 +64,15 @@ struct Params {
         if (closed_stripes == 0) { // クローズドリストの分割数が 0 の時
             closed_stripes = std::max<uint32_t>(4u * num_threads, 8u);
         }
-
         num_queues = std::min<uint32_t>(num_queues, 16u * num_threads); // 極端な多重を制限する
+
         weight = (weight < 1.0f) ? 1.0f : weight; // weight が 1.0 未満の場合は、すべて 1.0 とする
+
         bucket_delta = (bucket_delta <= 0.0f) ? 1.0f : bucket_delta;
         buckets_window = std::max<uint32_t>(buckets_window, 32u);
+        bucket_shards = (bucket_shards == 0) ? std::max<uint32_t>(num_threads, 2u) : bucket_shards;
+        bucket_select_k = std::min<uint32_t>(std::max<uint32_t>(bucket_select_k, 1u), 8u);
+
         log_interval_ms = std::max<uint32_t>(log_interval_ms, 100u);
     }
 };
