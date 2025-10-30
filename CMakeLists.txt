@@ -72,6 +72,8 @@ add_library(sas_parallel_soc STATIC
     src/sas/parallel_SOC/thread_pool.cpp
 )
 target_include_directories(sas_parallel_soc PUBLIC ${CMAKE_SOURCE_DIR}/include)
+# violates_mutex() を参照するため、解決元の sas_reader にも明示リンクする
+target_link_libraries(sas_parallel_soc PUBLIC sas_reader)
 if (UNIX)
   target_link_libraries(sas_parallel_soc PUBLIC pthread)
 endif()
