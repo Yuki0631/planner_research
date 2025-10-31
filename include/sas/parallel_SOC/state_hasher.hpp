@@ -16,6 +16,7 @@ namespace planner {
 namespace sas {
 namespace parallel_SOC {
 
+// State 同士の等価演算子
 struct StateEq {
     bool operator()(const sas::State& a, const sas::State& b) const noexcept {
         return a == b;
