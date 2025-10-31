@@ -21,7 +21,7 @@ struct Node {
     int h; // h-value
     uint32_t op_id; // 適用した演算子の ID
     uint64_t parent; // 親状態 ID
-    sas::State state; // 後に軽量化する
+    // 軽量化のために State は保持しない
 
     inline int f() const { // f-value を計算する関数
         return g + h;
