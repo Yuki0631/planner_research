@@ -31,7 +31,7 @@ class ClosedTable {
     using Map = std::unordered_map<sas::State, ClosedEntry, StateHash, StateEq>; // 状態と closed entry のハッシュマップ、ハッシュには StateHash, 等価演算子には StateEq を用いる
     const uint32_t stripes_; // 分割数
     std::vector<Map> maps_; // 部分ハッシュマップ数
-    std::vector<std::shared_mutex> locks_; // 各部分マップに対応するロック
+    mutable std::vector<std::shared_mutex> locks_; // 各部分マップに対応するロック
 
     // state から何番目のハッシュマップに入れるのか求める関数
     inline uint32_t stripe_of(const sas::State& s) const {
