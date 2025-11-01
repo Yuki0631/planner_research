@@ -449,7 +449,7 @@ public:
         assert(h >= 0);
 
         auto &bucket = L.buckets[static_cast<uint32_t>(h)];
-        const uint64_t last = bucket.size() - 1;
+        const uint32_t last = bucket.size() - 1;
 
         Value v = bucket[last];
         bucket.pop_back();
@@ -495,7 +495,7 @@ public:
         HLayer &L = layers_[p.f];
         auto &bucket = L.buckets[p.h];
 
-        const uint64_t last = bucket.size() - 1;
+        const uint32_t last = bucket.size() - 1;
         if (p.idx != last) {
             Value moved = bucket[last];
             bucket[p.idx] = moved;
@@ -635,7 +635,7 @@ private:
     struct Pos {
         uint32_t f = 0;
         uint32_t h = 0;
-        uint64_t idx = 0;
+        uint32_t idx = 0;
         bool present = false;
     };
 
@@ -701,7 +701,7 @@ private:
             HLayer &Lold = layers_[p.f];
             auto &bold = Lold.buckets[p.h];
 
-            const uint64_t last = bold.size() - 1;
+            const uint32_t last = bold.size() - 1;
 
             if (p.idx != last) {
                 Value moved = bold[last];
