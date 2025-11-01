@@ -395,7 +395,7 @@ private:
 // --- Two-level Bucket Priority Queue ---
 class TwoLevelBucketPQ {
 public:
-    using Value = uint32_t;
+    using Value = uint64_t;
     using Key   = UKey;
 
     TwoLevelBucketPQ() : count_(0) {}
@@ -410,7 +410,8 @@ public:
     void insert(Value v, Key k) {
         ensure_pos_(v);
 
-        Pos &p = pos_[v];
+        uint32_t idx = id2idx_.at(v);
+        Pos &p = pos_[idx];
         assert(!p.present && "insert: value already present");
 
         const uint32_t f = static_cast<uint32_t>(unpack_f(k));
@@ -454,7 +455,8 @@ public:
         Value v = bucket[last];
         bucket.pop_back();
 
-        Pos &p = pos_[v];
+        uint32_t idx = id2idx_.at(v);
+        Pos &p = pos_[idx];
         p.present = false;
         --count_;
 
@@ -485,13 +487,15 @@ public:
 
     // 該当ノードが存在するかどうか
     bool contains(Value v) const {
-        return v < pos_.size() && pos_[v].present;
+        auto it = id2idx_.find(v);
+        return it != id2idx_.end() && pos_[it->second].present;
     }
 
     // 値 v を削除する関数
     void remove(Value v) {
         if (!contains(v)) return;
-        Pos &p = pos_[v];
+        uint32_t idx_v = id2idx_.at(v);
+        Pos &p = pos_[idx_v];
         HLayer &L = layers_[p.f];
         auto &bucket = L.buckets[p.h];
 
@@ -499,7 +503,8 @@ public:
         if (p.idx != last) {
             Value moved = bucket[last];
             bucket[p.idx] = moved;
-            pos_[moved].idx = p.idx;
+            uint32_t midx = id2idx_.at(moved);
+            pos_[midx].idx = p.idx;
         }
         bucket.pop_back();
 
@@ -517,7 +522,8 @@ public:
     Key key_of(Value v) const {
         if (!contains(v)) return Key(UINT32_MAX);
 
-        const Pos &p = pos_[v];
+        const uint32_t idx = id2idx_.at(v);
+        const Pos &p = pos_[idx];
         return (static_cast<Key>(p.f) << H_BITS) | (static_cast<Key>(p.h) & H_MASK);
     }
 
@@ -539,6 +545,7 @@ public:
         pos_.clear();
 
         fbits_.clear_all();
+        id2idx_.clear();
         
         count_ = 0;
     }
@@ -665,8 +672,13 @@ private:
 
     // 容量確保系の関数群
     // Position
-    void ensure_pos_(uint32_t v) {
-        if (v >= pos_.size()) pos_.resize(v + 1);
+    void ensure_pos_(Value v) {
+        auto it = id2idx_.find(v);
+        if (it == id2idx_.end()) {
+            uint32_t idx = pos_.size();
+            pos_.resize(idx + 1);
+            id2idx_.emplace(v, idx);
+        }
     }
 
     // f Layer
@@ -687,7 +699,8 @@ private:
         const uint32_t nf = static_cast<uint32_t>(unpack_f(new_key));
         const uint32_t nh = static_cast<uint32_t>(unpack_h(new_key));
 
-        Pos &p = pos_[v];
+        uint32_t idx_v = id2idx_.at(v);
+        Pos &p = pos_[idx_v];
 
         // 前の key と比較する
         if (!allow_increase) {
@@ -706,7 +719,8 @@ private:
             if (p.idx != last) {
                 Value moved = bold[last];
                 bold[p.idx] = moved;
-                pos_[moved].idx = p.idx;
+                uint32_t midx = id2idx_.at(moved);
+                pos_[midx].idx = p.idx;
             }
 
             bold.pop_back();
@@ -732,4 +746,7 @@ private:
         if (!Lnew.hbits.test(nh)) Lnew.hbits.set(nh);
         if (!fbits_.test(nf)) fbits_.set(nf);
     }
+
+    // 64-bit 外部 ID -> 連番 idx（0..pos_.size()-1）へのマップ
+     std::unordered_map<Value, uint32_t> id2idx_;
 };
