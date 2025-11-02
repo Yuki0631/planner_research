@@ -1,7 +1,6 @@
 #pragma once
 #include "functional"
-#include "sas/sas_heuristic.hpp" // 既存のヒューリスティック実装を想定
-#include "sas/parallel_SOC/node.hpp"
+#include "sas/sas_heuristic.hpp"
 
 namespace planner { 
 namespace sas {
