@@ -23,7 +23,7 @@ public:
 
 explicit Heuristic(planner::sas::HeuristicFn fn) : hfn_(std::move(fn)) {} // コンストラクタ
 
-double operator()(const Task& task, State& s) const {
+double operator()(const Task& task, const State& s) const {
     return hfn_(task,s); // 関数呼出演算子
 }
 
