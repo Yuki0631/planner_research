@@ -41,7 +41,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
     IdAllocator ids; // ID 生成器
     Heuristic hfn = Heuristic::goalcount(); // ヒューリスティック関数
     ClosedTable closed(std::max<uint32_t>(1024, N*64)); // クローズドリスト
-    SharedOpen open(P.open_kind, Q); // オープンリスト
+    SharedOpen open(P.open_kind, Q, Q, 2); // オープンリスト //// 重要!! 後でシャード数や k-choice 数を調整できるようにする
     Termination term(P.time_limit_ms); // 時間制限
 
     StateStore store(std::max<uint32_t>(2048, N*128)); // ID と状態を対応させるハッシュマップ、2048 と N*128 で大きい方が分割数となる
@@ -74,6 +74,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
     std::atomic<uint64_t> goal_node{UINT64_MAX}; // goal node の ID を記録するための atomic 変数
 
     auto worker = [&](uint32_t tid){
+        planner::sas::soc::set_current_thread_index(tid); // 現在のスレッドの ID を登録する
         sas::State cur_state; // 現在の state
 
         while (!done.load(std::memory_order_acquire)) { // 探索が終了しない限り
