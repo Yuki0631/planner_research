@@ -55,13 +55,19 @@ public:
         }
         sz_.fetch_add(1, std::memory_order_relaxed); // 全体のノードの数を 1 だけインクリメントする
         if (gstats_) {
-            auto tid = planner::sas::soc::current_thread_index();
+            auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッドの ID の取得
+            gstats_ ->per_thread[tid].pushes++; // プッシュした回数を 1 インクリメントする
+            auto s = size();
+            if (s > gstats_->per_thread[tid].max_open_size_seen) { // スレッドごとに観測したオープンサイズの最大のサイズを更新する
+                gstats_->per_thread[tid].max_open_size_seen = s;
+            }
         }
     }
 
     // pop 関数
     std::optional<Node> pop(uint32_t qid) {
         const uint32_t N = qs_.size(); // マルチキューの総数
+        bool stole = false;
 
         // ID が担当しているキューからの取り出し
         {
@@ -71,6 +77,11 @@ public:
                 Node n = std::move(const_cast<Node&>(pq.q.top())); // top()
                 pq.q.pop(); // pop()
                 sz_.fetch_sub(1, std::memory_order_relaxed); // 全体のノードの数を 1 だけデクリメントする
+
+                if (gstats_) { // 統計を取っている場合
+                    auto tid = planner::sas::soc::current_thread_index();
+                    gstats_->per_thread[tid].pops++; // ポップした回数を 1 インクリメントする
+                }
                 return n;
             }
         }
@@ -84,6 +95,13 @@ public:
                 Node n = std::move(const_cast<Node&>(pq.q.top())); // top()
                 pq.q.pop(); // pop()
                 sz_.fetch_sub(1, std::memory_order_relaxed); // 全体のノード数を 1 だけデクリメントする。
+
+                if (gstats_) {
+                    auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
+                    auto& S = gstats_->per_thread[tid];
+                    S.pops++; // ポップした回数を 1 インクリメントする
+                    S.steals++; // 担当以外のキューからもノードを取ることができたので、steals を 1 インクリメントする
+                }
                 return n;
             }
         }
@@ -108,6 +126,7 @@ public:
 // 複数シャードに分割して、ロック競合を低減する。また、pop 時に k-choice でシャードをランダムサンプリングする
 class TwoLevelBucketOpen {
     using BucketPQ = TwoLevelBucketPQ;
+    planner::sas::soc::GlobalStats* gstats_ = nullptr;
 
     struct Shard {
         planner::sas::soc::TicketLock m; // ロック、書き込みメイン、FIFO の軽量ロックを用いる
@@ -142,6 +161,10 @@ public:
         : shards_(shards ? shards : 1) // シャード数が与えられなければ 1 とする
         , k_choice_(k_choice ? k_choice : 2) {}
 
+    void set_stats(planner::sas::soc::GlobalStats* p) {
+        gstats_ = p;
+    }
+
     // push 関数
     void push(uint32_t, Node&& n) { // 第一引数の Queue-ID はこの関数では無視する
         const uint32_t S = static_cast<uint32_t>(shards_.size()); // シャードの数
@@ -160,6 +183,15 @@ public:
             ++sh.size; // シャードに含まれるノード数を増加させる
         }
         sz_.fetch_add(1, std::memory_order_relaxed); // 全体のノード数を 1 インクリメントする
+
+        if (gstats_) {
+            auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッドの ID の取得
+            gstats_->per_thread[tid].pushes++; // プッシュ回数を 1 インクリメントする
+            auto s = size(); // 二段バケットに含まれる全ノード数を取得
+            if (s > gstats_->per_thread[tid].max_open_size_seen) { // スレッドごとに観測したオープンリストの最大のサイズを更新する
+                gstats_->per_thread[tid].max_open_size_seen = s;
+            }
+        }
     }
 
     // pop 関数
