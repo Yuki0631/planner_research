@@ -1,1 +1,177 @@
 #include "sas/parallel_SOC/parallel_search.hpp"
+#include <thread>
+#include <atomic>
+#include <limits>
+#include <unordered_map>
+
+// コンパイラに対するヒントのためのマクロ変数
+#define likely(x)   __builtin_expect(!!(x), 1) // よく起こりやすい条件分岐
+#define unlikely(x) __builtin_expect(!!(x), 0) // あまり起きない条件分岐
+
+namespace planner {
+namespace sas {
+namespace parallel_SOC {
+
+// 適用したactionを構築する関数
+static std::vector<uint32_t> reconstruct_plan(const std::unordered_map<uint64_t, Node>& nodes, uint64_t goal_id)
+{
+    std::vector<uint32_t> ops; // 演算子を積むためのベクタ
+    uint64_t cur = goal_id;
+    while (true) {
+        auto it = nodes.find(cur);
+        if (it == nodes.end()) { // ハッシュマップで指定の id が見つからなかった場合
+            break;
+        }
+        const Node& n = it->second;
+        if (n.parent == UINT64_MAX) { // もし親が規定値ならば (スタートノードならば)
+            break;
+        }
+        ops.push_back(n.op_id); // 演算子をベクタに積む
+        cur = n.parent; // 現在見ているノード id を更新する
+    }
+    std::reverse(ops.begin(), ops.end()); // 最初から最後にするため、std::reverseを用いる
+    return ops; // プランを返す
+}
+
+// A* 探索の主要部分
+SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
+    const uint32_t N = P.num_threads ? P.num_threads : 1; // スレッドの数
+    const uint32_t Q = P.num_queues ? P.num_queues : N; // Queue の数、なければスレッド数と一致させる
+
+    IdAllocator ids; // ID 生成器
+    Heuristic hfn = Heuristic::goalcount(); // ヒューリスティック関数
+    ClosedTable closed(std::max<uint32_t>(1024, N*64)); // クローズドリスト
+    SharedOpen open(P.open_kind, Q); // オープンリスト
+    Termination term(P.time_limit_ms); // 時間制限
+
+    StateStore store(std::max<uint32_t>(2048, N*128)); // ID と状態を対応させるハッシュマップ、2048 と N*128 で大きい方が分割数となる
+
+    // 解の復元のための、遭遇したノードを記録するテーブル
+    std::mutex reg_mtx; // テーブルのためのロック
+    std::unordered_map<uint64_t, Node> registry; // ID と ノードを対応させるハッシュマップ
+    registry.reserve(1<<24); // あらかじめ 2^24 の要素を確保しておく
+
+    // ルートノード
+    Node root;
+    root.id = ids.alloc();
+    root.g = 0;
+    root.h = hfn(T, T.init);
+    root.op_id  = std::numeric_limits<uint32_t>::max();
+    root.parent = std::numeric_limits<uint64_t>::max();
+
+    store.put(root.id, T.init); // ルートノードの ID と state をマップに挿入する
+    closed.prune_or_update(T.init, root.g, root.id);
+
+    // critical section (ノード記録表に登録)
+    {
+        std::lock_guard lg(reg_mtx);
+        registry.emplace(root.id, root);
+    }
+
+    open.push(0, std::move(root)); // オープンリストに push する
+
+    std::atomic<bool> done{false}; // 探索が終了しているか表すフラグ、複数のスレッドに共有するので、std::atomic を使用する
+    std::atomic<uint64_t> goal_node{UINT64_MAX}; // goal node の ID を記録するための atomic 変数
+
+    auto worker = [&](uint32_t tid){
+        std::vector<Generated> gen; // 生成されたノードを (Generated) を積むベクタ
+        sas::State cur_state; // 現在の state
+
+        while (!done.load(std::memory_order_acquire)) { // 探索が終了しない限り
+            if (unlikely(term.timed_out())) { // 時間制限を超えてしまった場合
+                done.store(true);
+                break;
+            }
+
+            auto item = open.pop(tid);
+            if (unlikely(!item.has_value())) { // オープンリストから取り出したノードが無効値の場合
+                if (open.empty()) { // オープンリスト (全体) が空ならば
+                    break;
+                }
+                std::this_thread::yield(); // 他のスレッドに譲る
+                continue;
+            }
+
+            Node cur = std::move(*item); // 現在のノードを更新する
+
+            // ハッシュマップから state を得ることが出来ない場合
+            if (unlikely(!store.get(cur.id, cur_state))) { // 通常あり得ないが、コンパイルエラー防止のため
+                continue;
+            }
+
+            // ゴール判定
+            bool is_goal = true; // ゴールかどうか表すフラグ
+            for (auto [v,val] : T.goal) { // goal state に含まれるすべての変数 id とその domain-value
+                if (cur_state[v] != val) { // 現在の state とゴールの state の変数の domain-value が一致しない場合
+                    is_goal=false;
+                    break;
+                }
+            }
+
+            if (unlikely(is_goal)) { // ゴール条件が満たされているのなら
+                goal_node.store(cur.id, std::memory_order_release); // ゴールノードに現在の ID を入れる
+                done.store(true, std::memory_order_release); // 探索終了を表す atomic flag の値を true にする
+                break;
+            }
+
+            // ノードの展開を行う
+            Expander::apply(T, cur_state, gen);
+
+            // 生成されたノード一つ一つに対して以下の操作を行う
+            for (auto& g : gen) { 
+                Node nxt;
+                nxt.id = ids.alloc(); // ID の割り当て
+                nxt.parent = cur.id; // 親の ID と繋げる
+                nxt.op_id = g.op_id; // 演算子 ID を設定すっる
+                nxt.g = cur.g + g.cost;
+                nxt.h = hfn(T, g.state);
+
+                // クローズドリストへの挿入
+                if (closed.prune_or_update(g.state, nxt.g, nxt.id)) {
+                    continue;
+                }
+
+                // 状態をストアに登録する
+                store.put(nxt.id, std::move(g.state));
+
+                // ノード保管用のレジストリに Node を登録する
+                {
+                    std::lock_guard lg(reg_mtx); // ロックを行う
+                    registry.emplace(nxt.id, nxt);
+                }
+                // オープンリストへの挿入
+                open.push(tid, std::move(nxt));
+            }
+        }
+    };
+
+    std::vector<std::thread> th; // 各スレッドを積んだベクタ
+    th.reserve(N);
+
+    for (uint32_t t=0; t<N; ++t) {
+        th.emplace_back(worker, t); // それぞれのスレッドに仕事を渡す
+    }
+
+    for (auto& x : th) {
+        x.join(); // 全スレッドを呼出し、それらすべてが終了するまで待機する
+    }
+
+    SearchResult R;
+
+    if (goal_node.load() != UINT64_MAX) { // ゴールノードが発見された場合
+        R.solved = true;
+        auto plan = reconstruct_plan(registry, goal_node.load());
+        R.plan_ops = std::move(plan);
+        int cost = 0;
+        for (auto oi : R.plan_ops) {
+            cost += T.ops[oi].cost;
+        }
+        R.cost = cost;
+    }
+
+    return R;
+}
+
+} // namespace parallel_SOC
+} // namespace sas
+} // namespace planner
