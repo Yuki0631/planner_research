@@ -28,7 +28,7 @@ class MultiQueueOpen {
     // priority queue 用の struct
     struct PQ {
         std::priority_queue<Node, std::vector<Node>, NodeLess> q; // Node を要素とし、比較関数は、NodeLess とする (node.hpp)
-        std::mutex m; // ロック、書き込みメインなので、std::mutex を利用する
+        planner::sas::soc::SpinLock m; // 軽量ロック、書き込みメイン
     };
 
     std::vector<PQ> qs_; // PQ を積んだベクトル
@@ -42,7 +42,7 @@ public:
         auto& pq = qs_[qid % qs_.size()]; // priority queue のインデックスは、ID をキューの総数で割った時の余りとする
         // critical section
         {
-            std::lock_guard lg(pq.m); // その priority queue をロックする
+            planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m); // その priority queue をロックする
             pq.q.push(std::move(n)); // Queue に値を入れる
         }
         sz_.fetch_add(1, std::memory_order_relaxed); // 全体のノードの数を 1 だけインクリメントする
@@ -55,7 +55,7 @@ public:
         // ID が担当しているキューからの取り出し
         {
             auto& pq = qs_[qid % N]; // ID から計算されるインデックスのキュー
-            std::lock_guard lg(pq.m); // ロックを行う
+            planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m); // ロックを行う
             if (!pq.q.empty()) { // キューが空でない場合
                 Node n = std::move(const_cast<Node&>(pq.q.top())); // top()
                 pq.q.pop(); // pop()
@@ -99,7 +99,7 @@ class TwoLevelBucketOpen {
     using BucketPQ = TwoLevelBucketPQ;
 
     struct Shard {
-        std::mutex m; // ロック、書き込みなので std::mutex を用いる
+        planner::sas::soc::TicketLock m; // ロック、書き込みメイン、FIFO の軽量ロックを用いる
         BucketPQ pq;
         std::unordered_map<BucketPQ::Value, Node> store; // node 本体を保存するハッシュマップ (bucket_pq.hpp 自体は ID (uint_32t) の保存しかできない)
         uint64_t size = 0; // このシャードに入っている Node の個数
@@ -142,7 +142,7 @@ public:
 
         // critical section
         {
-            std::lock_guard<std::mutex> lg(sh.m); // 該当シャードをガードする
+            planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(sh.m); // 該当シャードをガードする
             auto id = n.id;
             sh.store.emplace(id, std::move(n)); // ハッシュマップに、ID と ノードを入れる
             sh.pq.insert(id, key); // バケットに挿入する
@@ -166,7 +166,7 @@ public:
             auto& sh = shards_[sid]; // 該当シャード
 
             // critical section
-            std::lock_guard<std::mutex> lg(sh.m); // ロックを掛ける
+            planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(sh.m); // ロックを掛ける
             if (sh.size == 0 || sh.pq.empty()) { // シャードに含まれるノードが 0 この場合
                 continue;
             }
@@ -187,7 +187,7 @@ public:
             auto& sh = shards_[sid];
 
             // critical section
-            std::lock_guard<std::mutex> lg(sh.m); // ロックを掛ける
+            planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(sh.m); // ロックを掛ける
             if (sh.size == 0 || sh.pq.empty()) {
                 continue;
             }
