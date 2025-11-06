@@ -211,6 +211,12 @@ public:
             // critical section
             planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(sh.m); // ロックを掛ける
             if (sh.size == 0 || sh.pq.empty()) { // シャードに含まれるノードが 0 この場合
+
+                if (gstats_) { // 統計値を取っている場合
+                    auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
+                    gstats_->per_thread[tid].bucket_pop_empty_probes++; // 空のシャードを走査してしまったので、その統計値を 1 インクリメントする
+                }
+
                 continue;
             }
 
@@ -221,6 +227,12 @@ public:
                 sh.store.erase(it); // ハッシュマップから、そのノードを削除する
                 --sh.size; // 該当シャードに含まれるノード数を 1 減らす
                 sz_.fetch_sub(1, std::memory_order_relaxed); // 全体のノード数を 1 だけデクリメントする
+
+                if (gstats_) { // 統計値を取っている場合
+                    auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
+                    gstats_->per_thread[tid].pops++; // ポップできた回数を 1 インクリメントする
+                }
+
                 return out;
             }
         }
@@ -232,6 +244,11 @@ public:
             // critical section
             planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(sh.m); // ロックを掛ける
             if (sh.size == 0 || sh.pq.empty()) {
+                if (gstats_) { // 統計値を取っている場合
+                    auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
+                    gstats_->per_thread[tid].bucket_pop_empty_probes++; // 空のシャードを走査してしまったので、その統計値を 1 インクリメントする
+                }
+
                 continue;
             }
 
@@ -243,6 +260,12 @@ public:
                 sh.store.erase(it);
                 --sh.size;
                 sz_.fetch_sub(1, std::memory_order_relaxed);
+
+                if (gstats_) { // 統計値を取っている場合
+                    auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
+                    gstats_->per_thread[tid].pops++; // ポップできた回数を 1 インクリメントする
+                }
+            
                 return out;
             }
         }
@@ -267,8 +290,11 @@ public:
 
 private:
     Kind kind_; // 種類を保持する変数
+
     MultiQueueOpen mq_; // マルチキューが都のオープンリスト
     TwoLevelBucketOpen tlb_; // 二段バケット型のオープンリスト
+
+    planner::sas::soc::GlobalStats* gstats_ = nullptr; // 統計保存用のための struct へのポインタ
 
 public:
     // コンストラクタ
@@ -311,6 +337,13 @@ public:
             case Kind::TwoLevelBucket: return tlb_.size();
         }
         return 0; // デフォルトの返し値 (コンパイルエラー・警告防止)
+    }
+
+    // 統計用の追跡ポインタをセットする関数
+    void set_stats(planner::sas::soc::GlobalStats* p) {
+        gstats_ = p;
+        mq_.set_stats(p);
+        tlb_.set_stats(p);
     }
 };
 
