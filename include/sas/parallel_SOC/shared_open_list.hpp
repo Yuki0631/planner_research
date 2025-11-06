@@ -12,11 +12,13 @@
 
 #include "sas/parallel_SOC/node.hpp"
 #include "sas/parallel_SOC/id_allocator.hpp"
-#include "params.hpp"
-#include "concurrency.hpp"
+#include "sas/parallel_SOC/params.hpp"
+#include "sas/parallel_SOC/concurrency.hpp"
 
 #define HAVE_BUCKET_PQ 1
 #include "bucket_pq.hpp"
+
+#include "sas/parallel_SOC/stats.hpp"
 
 
 namespace planner {
@@ -25,6 +27,7 @@ namespace parallel_SOC {
 
 // マルチキュー型のオープンリスト
 class MultiQueueOpen {
+    planner::sas::soc::GlobalStats* gstats_ = nullptr;
     // priority queue 用の struct
     struct PQ {
         std::priority_queue<Node, std::vector<Node>, NodeLess> q; // Node を要素とし、比較関数は、NodeLess とする (node.hpp)
@@ -36,6 +39,9 @@ class MultiQueueOpen {
 
 public:
     explicit MultiQueueOpen(uint32_t num_queues) : qs_(num_queues ? num_queues : 1) {} // コンストラクタ、キューの数を num_queues or 1 に設定する
+    void set_stats(planner::sas::soc::GlobalStats* p) {
+        gstats_ = p;
+    }
 
     // push 関数
     void push(uint32_t qid, Node&& n) {
@@ -46,6 +52,9 @@ public:
             pq.q.push(std::move(n)); // Queue に値を入れる
         }
         sz_.fetch_add(1, std::memory_order_relaxed); // 全体のノードの数を 1 だけインクリメントする
+        if (gstats_) {
+            auto tid = planner::sas::soc::current_thread_index();
+        }
     }
 
     // pop 関数

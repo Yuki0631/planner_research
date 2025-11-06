@@ -10,6 +10,7 @@
 #include "sas/parallel_SOC/expander.hpp"
 #include "sas/parallel_SOC/heuristic_adapter.hpp"
 #include "sas/parallel_SOC/termination.hpp"
+#include "sas/parallel_SOC/stats.hpp"
 
 namespace planner {
 namespace sas {
@@ -31,6 +32,6 @@ struct SearchResult {
 };
 
 // A* Search
-SearchResult astar_soc(const sas::Task& T, const SearchParams& P);
+SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::soc::GlobalStats* stats_out = nullptr);
 
 }}} // namespace
