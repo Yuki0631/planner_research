@@ -74,7 +74,6 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
     std::atomic<uint64_t> goal_node{UINT64_MAX}; // goal node の ID を記録するための atomic 変数
 
     auto worker = [&](uint32_t tid){
-        std::vector<Generated> gen; // 生成されたノードを (Generated) を積むベクタ
         sas::State cur_state; // 現在の state
 
         while (!done.load(std::memory_order_acquire)) { // 探索が終了しない限り
@@ -114,34 +113,30 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
                 break;
             }
 
-            // ノードの展開を行う
-            Expander::apply(T, cur_state, gen);
+            Expander::for_each_inplace(T, cur_state, 
+                [&](uint32_t op_id, int add_cost, const sas::State& succ) { // 参照で、インプレース変換された state を succ として別名で扱う
+                    Node nxt; // 後継ノード
+                    nxt.id = ids.alloc(); // ノード ID の割り振り
+                    nxt.parent = cur.id; // 親ノード ID を繋ぐ
+                    nxt.op_id = op_id;
+                    nxt.g = cur.g + add_cost;
+                    nxt.h = hfn(T, succ);
 
-            // 生成されたノード一つ一つに対して以下の操作を行う
-            for (auto& g : gen) { 
-                Node nxt;
-                nxt.id = ids.alloc(); // ID の割り当て
-                nxt.parent = cur.id; // 親の ID と繋げる
-                nxt.op_id = g.op_id; // 演算子 ID を設定すっる
-                nxt.g = cur.g + g.cost;
-                nxt.h = hfn(T, g.state);
+                    if (closed.prune_or_update(succ, nxt.g, nxt.id)) { // クローズドリストに挿入
+                        return;
+                    }
 
-                // クローズドリストへの挿入
-                if (closed.prune_or_update(g.state, nxt.g, nxt.id)) {
-                    continue;
+                    store.put(nxt.id, succ); // state のコピーの作成
+
+                    {
+                        std::lock_guard lg(reg_mtx); // ロックをかける
+                        registry.emplace(nxt.id, nxt); // ノードの登録
+                    }
+
+                    // オープンリストに挿入
+                    open.push(tid, std::move(nxt));
                 }
-
-                // 状態をストアに登録する
-                store.put(nxt.id, std::move(g.state));
-
-                // ノード保管用のレジストリに Node を登録する
-                {
-                    std::lock_guard lg(reg_mtx); // ロックを行う
-                    registry.emplace(nxt.id, nxt);
-                }
-                // オープンリストへの挿入
-                open.push(tid, std::move(nxt));
-            }
+            );
         }
     };
 
