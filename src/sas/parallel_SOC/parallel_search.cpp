@@ -47,7 +47,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
     StateStore store(std::max<uint32_t>(2048, N*128)); // ID と状態を対応させるハッシュマップ、2048 と N*128 で大きい方が分割数となる
 
     // 解の復元のための、遭遇したノードを記録するテーブル
-    std::mutex reg_mtx; // テーブルのためのロック
+    planner::sas::soc::TicketLock reg_mtx; // テーブルのためのロック (軽量 FIFO ロック)
     std::unordered_map<uint64_t, Node> registry; // ID と ノードを対応させるハッシュマップ
     registry.reserve(1<<24); // あらかじめ 2^24 の要素を確保しておく
 
@@ -64,7 +64,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
 
     // critical section (ノード記録表に登録)
     {
-        std::lock_guard lg(reg_mtx);
+        planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(reg_mtx); // ロックをかける
         registry.emplace(root.id, root);
     }
 
@@ -129,7 +129,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
                     store.put(nxt.id, succ); // state のコピーの作成
 
                     {
-                        std::lock_guard lg(reg_mtx); // ロックをかける
+                        planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(reg_mtx); // ロックをかける
                         registry.emplace(nxt.id, nxt); // ノードの登録
                     }
 
