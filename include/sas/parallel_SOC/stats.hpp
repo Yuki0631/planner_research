@@ -64,11 +64,13 @@ struct alignas(SOC_CACHELINE_SIZE) ThreadStats { // false sharing を防ぐた�
     }
 };
 
-// 全体統計（集計は呼び出し側で必要時のみ実施）
+// 全体統計（集計は呼び出し側で必要時のみ実施）、基本的にこの GlobalStats を利用する
 struct GlobalStats {
     std::vector<ThreadStats> per_thread; 
 
-    void resize(uint32_t n) { per_thread.resize(n); }
+    void resize(uint32_t n) {
+        per_thread.resize(n);
+    }
 
     ThreadStats sum() const {
         ThreadStats s{};
