@@ -6,8 +6,6 @@ namespace planner {
 namespace sas {
 
 struct Task;
-struct State;
-
 
 } // namespace sas
 } // namespace planner 
