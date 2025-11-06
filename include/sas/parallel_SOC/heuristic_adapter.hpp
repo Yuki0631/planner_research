@@ -1,6 +1,7 @@
 #pragma once
 #include "functional"
 #include "sas/sas_heuristic.hpp"
+#include "sas/parallel_SOC/parallel_soc_all.hpp"
 
 namespace planner { 
 namespace sas {

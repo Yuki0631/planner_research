@@ -6,6 +6,7 @@
 #include <shared_mutex>
 #include <unordered_map>
 #include "sas/sas_reader.hpp" // planner::sas::State
+#include "sas/parallel_SOC/parallel_soc_all.hpp"
 
 namespace planner { 
 namespace sas { 

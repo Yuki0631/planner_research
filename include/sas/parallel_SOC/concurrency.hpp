@@ -5,6 +5,7 @@
 #include <type_traits>
 #include <utility>
 #include <limits>
+#include "sas/parallel_SOC/parallel_soc_all.hpp"
 
 #if defined(__x86_64__) || defined(_M_X64) // SIMD 命令を行うために、x84_64, x64 architecture で使用可能なヘッダファイルをインクルードする
     #include <immintrin.h>

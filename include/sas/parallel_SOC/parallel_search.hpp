@@ -12,6 +12,8 @@
 #include "sas/parallel_SOC/termination.hpp"
 #include "sas/parallel_SOC/stats.hpp"
 
+#include "sas/parallel_SOC/parallel_soc_all.hpp"
+
 namespace planner {
 namespace sas {
 namespace parallel_SOC {

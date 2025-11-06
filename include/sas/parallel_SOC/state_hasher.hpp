@@ -2,6 +2,7 @@
 #include <vector>
 #include <cstddef>
 #include <cstdint>
+#include "sas/parallel_SOC/parallel_soc_all.hpp"
 
 namespace planner{ 
 namespace sas {
