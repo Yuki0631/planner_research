@@ -62,7 +62,9 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     Node root;
     root.id = ids.alloc();
     root.g = 0;
-    root.h = hfn(T, T.init);
+    uint64_t first_relax_eval_ns = planner::sas::soc::measure_ns_and_run([&](){
+                        root.h = hfn(T, T.init);
+                    });
     root.op_id  = std::numeric_limits<uint32_t>::max();
     root.parent = std::numeric_limits<uint64_t>::max();
 
@@ -179,6 +181,10 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     SearchResult R;
 
     if (stats_out) { // 統計値が書き込まれている場合
+        // 初期ノードのヒューリスティック関数の呼び出しを考慮する
+        stats_out->per_thread[0].evaluated += 1;
+        stats_out->per_thread[0].relax_eval_ns += first_relax_eval_ns;
+        
         *stats_out = GS; // GS を stats_out にコピー代入し、呼び出し側に結果を渡す
     }
 
