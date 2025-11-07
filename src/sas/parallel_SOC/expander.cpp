@@ -27,8 +27,16 @@ static bool check_prevail(const Operator& op, const State& s) {
 // pre_post の Cond が一致するかどうか確かめる関数
 static bool check_preconds(const Operator& op, const State& s) {
     for (auto& pp : op.pre_posts) {
-        for (auto [v,val] : std::get<0>(pp)) {
-            if (s[v] != val) { // var_id と domain-value が一致しない場合
+        const auto& conds = std::get<0>(pp);
+        int var = std::get<1>(pp);
+        int pre = std::get<2>(pp);
+
+        if (pre >= 0 && s[var] != pre) {
+            return false;
+        }
+
+        for (auto [cv,val] : conds) {
+            if (s[cv] != val) { // var_id と domain-value が一致しない場合
                 return false;
             }
         }
