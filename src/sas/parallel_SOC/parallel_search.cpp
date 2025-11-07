@@ -51,6 +51,9 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     GS.resize(N); // スレッドの数だけ容量を確保する
     open.set_stats(&GS); // オープンリストに統計情報を書き込むための struct のポインタを渡す
 
+    // スレッド ID の初期化
+    planner::sas::soc::set_current_thread_index(0);
+
     StateStore store(std::max<uint32_t>(2048, N*128)); // ID と状態を対応させるハッシュマップ、2048 と N*128 で大きい方が分割数となる
 
     // 解の復元のための、遭遇したノードを記録するテーブル
@@ -184,7 +187,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
         // 初期ノードのヒューリスティック関数の呼び出しを考慮する
         stats_out->per_thread[0].evaluated += 1;
         stats_out->per_thread[0].relax_eval_ns += first_relax_eval_ns;
-        
+
         *stats_out = GS; // GS を stats_out にコピー代入し、呼び出し側に結果を渡す
     }
 
