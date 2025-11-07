@@ -18,7 +18,7 @@ struct alignas(SOC_CACHELINE_SIZE) ThreadStats { // false sharing を防ぐた�
     // 主要カウンタ
     uint64_t generated = 0;
     uint64_t expanded = 0;
-    u_int64_t evaluated = 0;
+    uint64_t evaluated = 0;
     uint64_t reopened  = 0;
     uint64_t duplicates_pruned = 0;
 
