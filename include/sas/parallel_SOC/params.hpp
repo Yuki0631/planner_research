@@ -6,7 +6,7 @@
 
 namespace planner {
 namespace sas {
-namespace soc {
+namespace parallel_SOC {
 
 enum class QueueKind : uint8_t { // Open リストで使用するキューの種類
     MultiQueue = 0,
@@ -78,6 +78,6 @@ struct Params {
     }
 };
 
-} // namespace soc
+} // namespace parallel_SOC
 } // namespace sas
 } // namespace planner

@@ -13,7 +13,7 @@
 
 namespace planner {
 namespace sas {
-namespace soc {
+namespace parallel_SOC {
 
 // キャッシュラインのサイズを定義
 #ifndef SOC_CACHELINE_SIZE
@@ -178,6 +178,6 @@ public:
     }
 };
 
-} // namespace soc
+} // namespace parallel_SOC
 } // namespace sas
 } // namespace planner

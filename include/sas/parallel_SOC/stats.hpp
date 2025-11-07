@@ -6,7 +6,7 @@
 
 namespace planner {
 namespace sas {
-namespace soc {
+namespace parallel_SOC {
 
 // キャッシュラインのサイズを設定
 #ifndef SOC_CACHELINE_SIZE
@@ -91,6 +91,6 @@ inline uint64_t measure_ns_and_run(F&& f) {
   return (uint64_t) std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
 }
 
-} // namespace soc
+} // namespace parallel_SOC
 } // namespace sas
 } // namespace planner
