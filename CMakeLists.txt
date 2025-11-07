@@ -11,16 +11,21 @@ endif()
 
 add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wconversion -O3 -march=native)
 
-# --- Sanitizers (Debug) ---
-# if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  # 明示的に切り替えたい場合は -DSANITIZE=asan 等を指定する
-#   if (DEFINED SANITIZE AND SANITIZE STREQUAL "asan")
-#     add_compile_options(-fsanitize=address,undefined)
-#     add_link_options(-fsanitize=address,undefined)
-#   else()
-#     add_compile_options(-fsanitize=thread)
-#     add_link_options(-fsanitize=thread)
-#   endif()
+# if(NOT CMAKE_BUILD_TYPE)
+#   set(CMAKE_BUILD_TYPE Debug)
+# endif()
+
+# 共通の警告は常につける
+# add_compile_options(-Wall -Wextra -Wpedantic -Wshadow -Wconversion)
+
+# ビルドタイプ別の最適化・デバッグ設定
+# if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  # 最適化を切ってデバッグ情報とサニタイザを有効化
+  # add_compile_options(-g -O0 -fno-omit-frame-pointer -fsanitize=address,undefined)
+  # add_link_options(-fsanitize=address,undefined)
+# else()
+  # 通常（Release）は今まで通り高速化
+  # add_compile_options(-O3 -march=native)
 # endif()
 
 # --- ライブラリ ---
