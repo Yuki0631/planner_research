@@ -122,7 +122,7 @@ public:
 };
 
 
-// Two-Level Bucket Open（並列A* 向け、f-value を一次バケット（キー）、同一 f の中のバケットは FIFO（deque）
+// Two-Level Bucket Open
 // 複数シャードに分割して、ロック競合を低減する。また、pop 時に k-choice でシャードをランダムサンプリングする
 class TwoLevelBucketOpen {
     using BucketPQ = TwoLevelBucketPQ;
@@ -163,6 +163,9 @@ public:
 
     void set_stats(planner::sas::soc::GlobalStats* p) {
         gstats_ = p;
+        for (auto& sh : shards_) {
+            sh.pq.set_stats(p); // 各シャード内の PQ にも統計用のポインタをセットする
+        }
     }
 
     // push 関数
