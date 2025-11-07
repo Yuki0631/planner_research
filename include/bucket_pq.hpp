@@ -10,6 +10,9 @@
 #include <vector>
 #include <functional>
 
+#include "sas/parallel_SOC/stats.hpp"
+#include "sas/parallel_SOC/concurrency.hpp"
+
 using UKey = uint32_t; 
 static constexpr int  H_BITS = 16; // 32bit の半分の 16bit
 static constexpr UKey H_MASK = (UKey(1) << H_BITS) - 1; // 0...01...1 (16bit ずつ)
@@ -205,6 +208,11 @@ public:
     // コンストラクタ
     BucketPQ() : min_key_(UINT32_MAX), count_(0) {}
 
+    // 統計情報の struct を受け取るための関数
+    void set_stats(planner::sas::soc::GlobalStats* p) {
+        gstats_ = p;
+    }
+
     // 空かどうか確認する関数
     bool empty() const noexcept { return count_ == 0; }
 
@@ -318,6 +326,8 @@ private:
     Key min_key_; // 現在の最小値を追跡する変数
     uint32_t count_; // 要素の数をカウントする変数
 
+    planner::sas::soc::GlobalStats* gstats_ = nullptr; // 統計用 struct のポインタ
+
     // バケットのサイズを確保する関数
     void ensure_buckets_(uint32_t k) {
         if (k >= buckets_.size()) buckets_.resize(k + 1);
@@ -336,6 +346,8 @@ private:
         }
 
         uint32_t i = (min_key_ == UINT32_MAX) ? uint32_t(0) : static_cast<uint32_t>(min_key_);
+        uint32_t empty_skips = 0; // いくつの空の要素をスキップしたかを表す変数
+        const auto before = min_key_; // 過去の最小値の位置
 
         // もしバケットのサイズを超えていた場合
         if (i >= buckets_.size()) i = 0;
@@ -344,11 +356,24 @@ private:
         for (; i < buckets_.size(); ++i) {
             if (!buckets_[i].empty()) {
                 min_key_ = static_cast<Key>(i);
+
+                if (gstats_ && before != min_key_) { // 統計を取っているかつ最小値の位置が更新されている場合
+                    auto tid = planner::sas::soc::current_thread_index();
+                    gstats_->per_thread[tid].bucket_window_slides++; // ウィンドウスライドの回数を 1 インクリメントする
+                    gstats_->per_thread[tid].bucket_pop_empty_probes += empty_skips; // 空のバケットを操作した回数をスキップした回数分だけインクリメントする
+                }
+
                 return;
             }
+            ++empty_skips; // スキップした回数を 1 インクリメントする
         }
         // 念のため
         min_key_ = UINT32_MAX;
+        if (gstats_ && before != min_key_) {
+            auto tid = planner::sas::soc::current_thread_index();
+            gstats_->per_thread[tid].bucket_window_slides++;
+            gstats_->per_thread[tid].bucket_pop_empty_probes += empty_skips;
+        }
     }
 
     // Key を更新する関数
@@ -399,6 +424,11 @@ public:
     using Key   = UKey;
 
     TwoLevelBucketPQ() : count_(0) {}
+
+    // 統計用の struct を受け取る関数
+    void set_stats(planner::sas::soc::GlobalStats* p) {
+        gstats_ = p;
+    }
 
     // empty 関数
     bool empty() const noexcept { return count_ == 0; }
@@ -510,8 +540,20 @@ public:
 
         if (bucket.empty()) { // h バケットが空になった場合
             L.hbits.clear(p.h);
+
+            if (gstats_) { // h バケットが空になったので、ウィンドウがスライドする
+                auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID を取得する
+                gstats_->per_thread[tid].bucket_window_slides++;
+            }
+
             if (!L.hbits.any()) { // f バケットが空になった場合
                 fbits_.clear(p.f);
+
+                if (gstats_) { // f バケットも空なので、さらに外側のウィンドウがスライドする
+                    auto tid = planner::sas::soc::current_thread_index();
+                    gstats_->per_thread[tid].bucket_window_slides++;
+                }
+
             }
         }
         p.present = false;
@@ -551,6 +593,9 @@ public:
     }
 
 private:
+    // 統計用のポインタ
+    planner::sas::soc::GlobalStats* gstats_ = nullptr;
+
     // ビットセット
     struct Bitset {
         DynamicArray<uint64_t> w_; // 64bit ワード列
@@ -727,7 +772,21 @@ private:
 
             if (bold.empty()) {
                 Lold.hbits.clear(p.h);
-                if (!Lold.hbits.any()) fbits_.clear(p.f);
+
+                if (gstats_) { // h バケットが空になった場合
+                    auto tid = planner::sas::soc::current_thread_index();
+                    gstats_->per_thread[tid].bucket_window_slides++;
+                }
+
+                if (!Lold.hbits.any()) {
+                    fbits_.clear(p.f);
+
+                    if (gstats_) { // f バケットが空になった場合
+                        auto tid = planner::sas::soc::current_thread_index();
+                        gstats_->per_thread[tid].bucket_window_slides++;
+                    }
+
+                }
             }
         }
 
