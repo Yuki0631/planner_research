@@ -141,6 +141,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                         nxt.h = hfn(T, succ);
                     });
 
+                    S.evaluated++;
+
                     // reopen 判定のために事前にクローズリストにノードが含まれているか確認する
                     auto prev = closed.get(succ);
 
@@ -184,9 +186,11 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     SearchResult R;
 
     if (stats_out) { // 統計値が書き込まれている場合
-        // 初期ノードのヒューリスティック関数の呼び出しを考慮する
-        stats_out->per_thread[0].evaluated += 1;
-        stats_out->per_thread[0].relax_eval_ns += first_relax_eval_ns;
+        // 初期ノードのヒューリスティック評価を GS に反映してからコピーする
+        if (!GS.per_thread.empty()) {
+            GS.per_thread[0].evaluated += 1;
+            GS.per_thread[0].relax_eval_ns += first_relax_eval_ns;
+        }
 
         *stats_out = GS; // GS を stats_out にコピー代入し、呼び出し側に結果を渡す
     }
