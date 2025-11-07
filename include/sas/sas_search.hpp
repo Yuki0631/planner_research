@@ -31,7 +31,7 @@ struct Stats {
 struct Result {
     bool solved = false;
     double plan_cost = 0.0;
-    std::vector<int> plan; // op index の列
+    std::vector<uint32_t> plan; // op index の列
     std::vector<Node> nodes; // 探索ノード（復元用）
     Stats stats;
 };
@@ -43,9 +43,9 @@ struct Params {
 };
 
 // --- ユーティリティ ---
-double eval_plan_cost(const planner::sas::Task& T, const std::vector<int>& plan);
-std::string plan_to_string(const planner::sas::Task& T, const std::vector<int>& plan);
-std::string plan_to_val(const planner::sas::Task& T, const std::vector<int>& plan);
+double eval_plan_cost(const planner::sas::Task& T, const std::vector<uint32_t>& plan);
+std::string plan_to_string(const planner::sas::Task& T, const std::vector<uint32_t>& plan);
+std::string plan_to_val(const planner::sas::Task& T, const std::vector<uint32_t>& plan);
 
 // A* / GBFS
 Result astar   (const planner::sas::Task& T, HeuristicFn h, bool h_is_integer, const Params& p);

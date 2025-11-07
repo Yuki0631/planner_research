@@ -51,7 +51,7 @@ struct VecEq {
 };
 
 // プラン評価/表示
-double eval_plan_cost(const Task& T, const std::vector<int>& plan) {
+double eval_plan_cost(const Task& T, const std::vector<uint32_t>& plan) {
     double c = 0.0;
     for (int a : plan) {
         c += T.ops[a].cost;
@@ -59,7 +59,7 @@ double eval_plan_cost(const Task& T, const std::vector<int>& plan) {
     return c;
 }
 
-std::string plan_to_string(const Task& T, const std::vector<int>& plan) {
+std::string plan_to_string(const Task& T, const std::vector<uint32_t>& plan) {
     std::ostringstream oss;
     for (std::size_t i=0;i<plan.size();++i) {
         if (i) oss << "\n";
@@ -69,7 +69,7 @@ std::string plan_to_string(const Task& T, const std::vector<int>& plan) {
     return oss.str();
 }
 
-std::string plan_to_val(const Task& T, const std::vector<int>& plan) {
+std::string plan_to_val(const Task& T, const std::vector<uint32_t>& plan) {
     std::ostringstream oss;
     for (std::size_t i=0;i<plan.size();++i) {
         if (i) oss << "\n";
@@ -147,8 +147,8 @@ static inline void apply_inplace(const Task& T, const Operator& op, State& s, Un
 }
 
 // ノード→プラン復元
-static std::vector<int> extract_plan(const std::vector<Node>& nodes, int goal_id) {
-    std::vector<int> acts;
+static std::vector<uint32_t> extract_plan(const std::vector<Node>& nodes, int goal_id) {
+    std::vector<uint32_t> acts;
     for (int v = goal_id; v >= 0 && nodes[v].parent >= 0; v = nodes[v].parent) {
         acts.push_back(nodes[v].act_id);
     }
