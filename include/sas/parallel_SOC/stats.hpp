@@ -17,19 +17,20 @@ namespace parallel_SOC {
 struct alignas(SOC_CACHELINE_SIZE) ThreadStats { // false sharing を防ぐための alignas(64) (64bit 境界に統計用の Struct を配置する)
     // 主要カウンタ
     uint64_t generated = 0;
-    uint64_t expanded  = 0;
+    uint64_t expanded = 0;
+    u_int64_t evaluated = 0;
     uint64_t reopened  = 0;
     uint64_t duplicates_pruned = 0;
 
     // Open 操作
     uint64_t pushes = 0;
-    uint64_t pops   = 0;
+    uint64_t pops = 0;
     uint64_t steals = 0; // 他キュー/他シャードから盗んだ回数
 
     // バケットPQ
-    uint64_t bucket_window_slides   = 0; // outer window を前進させた回数
+    uint64_t bucket_window_slides = 0; // outer window を前進させた回数
     uint64_t bucket_push_collisions = 0; // バケット衝突で再試行した回数
-    uint64_t bucket_pop_empty_probes= 0; // 空バケットを引いた回数（近似負荷指標）
+    uint64_t bucket_pop_empty_probes = 0; // 空バケットを引いた回数（近似負荷指標）
 
     // ヒューリスティック等の計測
     uint64_t relax_eval_ns = 0;
@@ -39,7 +40,7 @@ struct alignas(SOC_CACHELINE_SIZE) ThreadStats { // false sharing を防ぐた�
 
     // 各統計値を 0 に戻す関数
     void reset() {
-        generated = expanded = reopened = duplicates_pruned = 0;
+        generated = expanded = evaluated = reopened = duplicates_pruned = 0;
         pushes = pops = steals = 0;
         bucket_window_slides = bucket_push_collisions = bucket_pop_empty_probes = 0;
         relax_eval_ns = 0;
@@ -50,6 +51,7 @@ struct alignas(SOC_CACHELINE_SIZE) ThreadStats { // false sharing を防ぐた�
     void add(const ThreadStats& o) {
         generated += o.generated;
         expanded  += o.expanded;
+        evaluated += o.evaluated;
         reopened  += o.reopened;
         duplicates_pruned += o.duplicates_pruned;
         pushes += o.pushes;
@@ -78,7 +80,7 @@ struct GlobalStats {
         for (const auto& t : per_thread) {
             s.add(t);
         }
-            return s;
+        return s;
     }
 };
 
