@@ -46,6 +46,11 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     SharedOpen open(P.open_kind, Q, Sh, K); // オープンリスト
     Termination term(P.time_limit_ms); // 時間制限
 
+    // 統計値の取得
+    planner::sas::soc::GlobalStats GS;
+    GS.resize(N); // スレッドの数だけ容量を確保する
+    open.set_stats(&GS); // オープンリストに統計情報を書き込むための struct のポインタを渡す
+
     StateStore store(std::max<uint32_t>(2048, N*128)); // ID と状態を対応させるハッシュマップ、2048 と N*128 で大きい方が分割数となる
 
     // 解の復元のための、遭遇したノードを記録するテーブル
@@ -78,6 +83,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     auto worker = [&](uint32_t tid){
         planner::sas::soc::set_current_thread_index(tid); // 現在のスレッドの ID を登録する
         sas::State cur_state; // 現在の state
+        auto& S = GS.per_thread[tid]; // 各スレッドごとの統計値を取得する
 
         while (!done.load(std::memory_order_acquire)) { // 探索が終了しない限り
             if (unlikely(term.timed_out())) { // 時間制限を超えてしまった場合
@@ -95,6 +101,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
             }
 
             Node cur = std::move(*item); // 現在のノードを更新する
+            S.expanded++; // expansion を 1 インクリメントする
 
             // ハッシュマップから state を得ることが出来ない場合
             if (unlikely(!store.get(cur.id, cur_state))) { // 通常あり得ないが、コンパイルエラー防止のため
@@ -123,11 +130,26 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                     nxt.parent = cur.id; // 親ノード ID を繋ぐ
                     nxt.op_id = op_id;
                     nxt.g = cur.g + add_cost;
-                    nxt.h = hfn(T, succ);
+                    
+                    // h-value の計算時間を測定しつつ算出する
+                    S.relax_eval_ns += planner::sas::soc::measure_ns_and_run([&](){
+                        nxt.h = hfn(T, succ);
+                    });
 
-                    if (closed.prune_or_update(succ, nxt.g, nxt.id)) { // クローズドリストに挿入
+                    // reopen 判定のために事前にクローズリストにノードが含まれているか確認する
+                    auto prev = closed.get(succ);
+
+                    if (closed.prune_or_update(succ, nxt.g, nxt.id)) { // g-value が悪化または同じである場合は、枝狩りを行う
+                        S.duplicates_pruned++; // 枝狩りできたので、その統計値を 1 インクリメントする
                         return;
                     }
+
+                    // クローズドリストに含まれていたが改善した場合
+                    if (prev.has_value()) {
+                        S.reopened++;
+                    }
+
+                    S.generated++; // 生成ノード数を 1 インクリメントする
 
                     store.put(nxt.id, succ); // state のコピーの作成
 
@@ -155,6 +177,10 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     }
 
     SearchResult R;
+
+    if (stats_out) { // 統計値が書き込まれている場合
+        *stats_out = GS; // GS を stats_out にコピー代入し、呼び出し側に結果を渡す
+    }
 
     if (goal_node.load() != UINT64_MAX) { // ゴールノードが発見された場合
         R.solved = true;
