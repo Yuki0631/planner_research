@@ -4,6 +4,7 @@ The planner implemented by the owner, Yuki Suzuki.  <br>
 The planner has  two types. One is of the STRIPS type and the other one is of the FDR type. <br>
 The FDR type planner uses fast-downward translator, but other functions are implemented by the owner. <br>
 Some search algorithms and heuristic functions will be added later. <br>
+It is assumed that this planner is used in Linux environment. <br>
 <br>
 
 ## 2. Parallel Search Planner (parallel_SOC)
