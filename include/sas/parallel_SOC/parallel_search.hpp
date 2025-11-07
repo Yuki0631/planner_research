@@ -24,6 +24,8 @@ struct SearchParams {
     SharedOpen::Kind open_kind = SharedOpen::Kind::MultiQueue; // オープンリストの種類
     uint32_t num_queues = 0; // キューの数
     int time_limit_ms = -1; // タイムリミット
+    uint32_t num_bucket_shards = 0;
+    u_int32_t num_k_select = 2;
 };
 
 // 探索結果

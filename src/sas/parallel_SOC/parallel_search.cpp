@@ -34,14 +34,16 @@ static std::vector<uint32_t> reconstruct_plan(const std::unordered_map<uint64_t,
 }
 
 // A* 探索の主要部分
-SearchResult astar_soc(const sas::Task& T, const SearchParams& P) {
+SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::soc::GlobalStats* stats_out) {
     const uint32_t N = P.num_threads ? P.num_threads : 1; // スレッドの数
     const uint32_t Q = P.num_queues ? P.num_queues : N; // Queue の数、なければスレッド数と一致させる
+    const uint32_t Sh = P.num_bucket_shards ? P.num_bucket_shards : N; // 二段バケットのシャードの数、なければスレッド数と一致させる
+    const uint32_t K = P.num_k_select ? P.num_k_select : 2; // 二段バケットの k-choice の選択数パラメタ
 
     IdAllocator ids; // ID 生成器
     Heuristic hfn = Heuristic::goalcount(); // ヒューリスティック関数
     ClosedTable closed(std::max<uint32_t>(1024, N*64)); // クローズドリスト
-    SharedOpen open(P.open_kind, Q, Q, 2); // オープンリスト //// 重要!! 後でシャード数や k-choice 数を調整できるようにする
+    SharedOpen open(P.open_kind, Q, Sh, K); // オープンリスト
     Termination term(P.time_limit_ms); // 時間制限
 
     StateStore store(std::max<uint32_t>(2048, N*128)); // ID と状態を対応させるハッシュマップ、2048 と N*128 で大きい方が分割数となる
