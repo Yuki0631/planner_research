@@ -85,12 +85,34 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     std::atomic<bool> done{false}; // 探索が終了しているか表すフラグ、複数のスレッドに共有するので、std::atomic を使用する
     std::atomic<uint64_t> goal_node{UINT64_MAX}; // goal node の ID を記録するための atomic 変数
 
+    std::atomic<uint32_t> active_workrs{0};
+
     auto worker = [&](uint32_t tid){
         planner::sas::soc::set_current_thread_index(tid); // 現在のスレッドの ID を登録する
         sas::State cur_state; // 現在の state
         auto& S = GS.per_thread[tid]; // 各スレッドごとの統計値を取得する
 
-        while (!done.load(std::memory_order_acquire)) { // 探索が終了しない限り
+        bool is_active = false; // 各スレッドが、仕事を持っている状態かを表す変数
+
+        auto become_active = [&]() {
+            if (is_active) {
+                is_active = true;
+                active_workrs.fetch_add(1, std::memory_order_acq_rel);
+            }
+        };
+
+        auto become_idle = [&]() {
+            if (is_active) {
+                is_active = false;
+                active_workrs.fetch_sub(1, std::memory_order_acq_rel);
+            }
+        };
+
+        while (true) { // 探索が終了しない限り
+            if (unlikely(done.load(std::memory_order_acquire))) { // 解が見つかった場合
+                break;
+            }
+
             if (unlikely(term.timed_out())) { // 時間制限を超えてしまった場合
                 done.store(true);
                 break;
@@ -98,9 +120,13 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
             auto item = open.pop(tid);
             if (unlikely(!item.has_value())) { // オープンリストから取り出したノードが無効値の場合
-                if (open.empty()) { // オープンリスト (全体) が空ならば
+                become_idle(); // 現在は仕事がないので、アイドリングする
+
+                if (open.empty() && active_workrs.load(std::memory_order_acquire) == 0) { // オープンリスト (全体) が空かつどのスレッドもアイドル状態の時
+                    done.store(true, std::memory_order_release);
                     break;
                 }
+
                 std::this_thread::yield(); // 他のスレッドに譲る
                 continue;
             }
@@ -157,7 +183,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                     });
 
                     S.evaluated++; 
-                    
+
                     store.put(nxt.id, succ); // state のコピーの作成
 
                     {
@@ -169,6 +195,11 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                     open.push(tid, std::move(nxt));
                 }
             );
+        }
+
+        // ループ脱出時に、active である場合、それを解除しておく
+        if (is_active) {
+            active_workrs.fetch_sub(1, std::memory_order_acq_rel);
         }
     };
 
