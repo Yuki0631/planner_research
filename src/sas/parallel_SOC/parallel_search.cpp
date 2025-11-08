@@ -95,7 +95,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
         bool is_active = false; // 各スレッドが、仕事を持っている状態かを表す変数
 
         auto become_active = [&]() {
-            if (is_active) {
+            if (!is_active) {
                 is_active = true;
                 active_workrs.fetch_add(1, std::memory_order_acq_rel);
             }
@@ -131,6 +131,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                 continue;
             }
 
+            become_active();
             Node cur = std::move(*item); // 現在のノードを更新する
             S.expanded++; // expansion を 1 インクリメントする
 
