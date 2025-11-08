@@ -136,12 +136,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                     nxt.op_id = op_id;
                     nxt.g = cur.g + add_cost;
                     
-                    // h-value の計算時間を測定しつつ算出する
-                    S.relax_eval_ns += planner::sas::soc::measure_ns_and_run([&](){
-                        nxt.h = hfn(T, succ);
-                    });
-
-                    S.evaluated++;
+                    S.generated++;
 
                     // reopen 判定のために事前にクローズリストにノードが含まれているか確認する
                     auto prev = closed.get(succ);
@@ -156,8 +151,13 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                         S.reopened++;
                     }
 
-                    S.generated++; // 生成ノード数を 1 インクリメントする
+                    // h-value の計算時間を測定しつつ算出する
+                    S.relax_eval_ns += planner::sas::soc::measure_ns_and_run([&](){
+                        nxt.h = hfn(T, succ);
+                    });
 
+                    S.evaluated++; 
+                    
                     store.put(nxt.id, succ); // state のコピーの作成
 
                     {
