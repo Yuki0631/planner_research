@@ -64,7 +64,7 @@ public:
                 return;
             }
             // 他スレッドが使用中の場合は、バックオフ時間待機する
-            while (flag.test_and_set(std::memory_order_relaxed)) { // 他スレッドが使っている最中の場合
+            while (flag.test(std::memory_order_relaxed)) { // 他スレッドが使っている最中の場合
                 bk.pause(); // バックオフ時間待つ
             }
         }
