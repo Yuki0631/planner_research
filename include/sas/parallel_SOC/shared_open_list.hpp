@@ -266,7 +266,11 @@ public:
 
                 if (gstats_) { // 統計値を取っている場合
                     auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
-                    gstats_->per_thread[tid].pops++; // ポップできた回数を 1 インクリメントする
+                    auto &S = gstats_->per_thread[tid];
+                    S.pops++; // ポップできた回数を 1 インクリメントする
+                    if (sid != tid) {
+                        S.steals++;   
+                    }
                 }
             
                 return out;
