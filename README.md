@@ -1,14 +1,18 @@
 # planner_research
 ## 1. What is this planner?
-The planner implemented by the owner, Yuki Suzuki.  <br>
-The planner has  two types. One is of the STRIPS type and the other one is of the FDR type. <br>
-The FDR type planner uses fast-downward translator, but other functions are implemented by the owner. <br>
-Some search algorithms and heuristic functions will be added later. <br>
-It is assumed that this planner is used in Linux environment. <br>
-<br>
+The planner implemented by the owner, Yuki Suzuki.
+
+The planner has  two types. One is of the STRIPS type and the other one is of the FDR type. 
+
+The FDR type planner uses fast-downward translator, but other functions are implemented by the owner. 
+
+Some search algorithms and heuristic functions will be added later. 
+
+It is assumed that this planner is used in Linux environment. 
+
 
 ## 2. Parallel Search Planner (parallel_SOC)
-Parallel search system is under construct. <br>
+Parallel search system is under construct. 
 You can check my source code via "include/sas/parallel_SOC" or "src/sas/parallel_SOC".
 
 ## 3. Directory Structure
@@ -81,7 +85,8 @@ The directory structure is shown in the following tree diagram.
 9 directories, 53 files
 ```
 
-This diagram omits pddl folder because it only includes test pddl files. <br>
+This diagram omits pddl folder because it only includes test pddl files.
+
 You can check your own clon directory structure via a bash code like the following one.
 
 ```{bash}
@@ -90,42 +95,43 @@ tree -L 4 -I build -I pddl
 
 
 ## 4. How to use this planner
-1. Clone this repository. <br>
-2. Create a build directory directly under the planner_research folder. <br>
+1. Clone this repository. 
+2. Create a build directory directly under the planner_research folder.
+
     
 ```{bash}
 cd planner_research
 mkdir build
  ```
-<br>
-3. Build the project with CMake. <br>
+
+3. Build the project with CMake. 
 
 ```{bash}
 cd build
 cmake .. && cmake --build . -j
 ```
     
-<br>
+
 4. You can execute this planner after building it. The basic bash commands are described in the following sections.
-<br>
-4.1 If you would like to do planning from parsing/grounding to search, please enter this command.  
+
+4.1 If you would like to do planning **from parsing/grounding to search**, please enter this command.  
 
 ```{bash}
 ./planner <domain.pddl> <problem.pddl> [--algo astar|gbfs] [--h blind|goalcount|wgoalcount W] [--plan-out <DIR>] 
 ```
 
-<br>
-4.2 If you would like to use a FDR type planner, please enter this command. <br>
+
+4.2 If you would like to use a **FDR type** planner, please enter this command. 
 
 ```{bash}
 ./planner_sas <domain.pddl> <problem.pddl> [--algo astar|gbfs] [--search-cpu-limit int(second)] [--search-mem-limit-mb int(MB)] [--fd <fast-downward.sif>] [--sas-file <DIR>] [--h goalcount|blind] [--keep-sas] [--plan-out <DIR>] [--check-mutex on|off|auto] [--val <validate>] [--val-args]
 ```
 
-<br>
-4.3 If you would like to use **parallel type** planner, please enter this command. <br>
+
+4.3 If you would like to use **parallel type** planner, please enter this command.
 
 ```{bash}
 ./planner_sas <domain.pddl> <problem.pddl> [--algo soc_astar] [--search-cpu-limit int(second)] [--search-mem-limit-mb int(MB)] [--fd <fast-downward.sif>] [--sas-file <DIR>] [--h goalcount|blind] [--keep-sas] [--plan-out <DIR>] [--check-mutex on|off|auto] [--val <validate>] [--val-args] [--soc-threads N] [--soc-open multi|bucket] [--soc-queues Q] [--soc-k K]
 ```
 
-<br>
+
