@@ -106,17 +106,26 @@ cmake .. && cmake --build . -j
 ```
     
 <br>
-4. Execute the project in your build directory. <br>
+4. You can execute this planner after building it. The basic bash commands are described in the following sections.
+<br>
+4.1 If you would like to do planning from parsing/grounding to search, please enter this command.  
 
 ```{bash}
-./planner <domain.pddl> <problem.pddl> [--algo astar|gbfs] "<< "[--h blind|goalcount|wgoalcount W] [--plan-dir <DIR>]
+./planner <domain.pddl> <problem.pddl> [--algo astar|gbfs] [--h blind|goalcount|wgoalcount W] [--plan-out <DIR>] 
 ```
 
 <br>
-4.1 If you would like to use FDR type planner, please enter this command. <br>
+4.2 If you would like to use a FDR type planner, please enter this command. <br>
 
 ```{bash}
-./planner_sas <domain.pddl> <problem.pddl> [--algo astar|gbfs] [--fd <fast-downward.sif>] [--sas-file <DIR>] [--h goalcount|blind] [--keep-sas] [--plan-out <DIR>] [--check-mutex on|off|auto] [--val <validate>] [--val-args]
+./planner_sas <domain.pddl> <problem.pddl> [--algo astar|gbfs] [--search-cpu-limit int(second)] [--search-mem-limit-mb int(MB)] [--fd <fast-downward.sif>] [--sas-file <DIR>] [--h goalcount|blind] [--keep-sas] [--plan-out <DIR>] [--check-mutex on|off|auto] [--val <validate>] [--val-args]
+```
+
+<br>
+4.3 If you would like to use **parallel type** planner, please enter this command. <br>
+
+```{bash}
+./planner_sas <domain.pddl> <problem.pddl> [--algo soc_astar] [--search-cpu-limit int(second)] [--search-mem-limit-mb int(MB)] [--fd <fast-downward.sif>] [--sas-file <DIR>] [--h goalcount|blind] [--keep-sas] [--plan-out <DIR>] [--check-mutex on|off|auto] [--val <validate>] [--val-args] [--soc-threads N] [--soc-open multi|bucket] [--soc-queues Q] [--soc-k K]
 ```
 
 <br>
