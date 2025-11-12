@@ -115,7 +115,7 @@ public:
         }
 
         // k-choice で発見できなかった場合は、すべてのシャードを走査する
-        for (uint32_t t = 0; t < N; ++t) {
+        for (uint32_t t = k_choice_; t < (N + k_choice_); ++t) {
             uint32_t sid = (seed + t) % N;
             auto& pq = qs_[sid];
 
@@ -167,11 +167,10 @@ class TwoLevelBucketOpen {
         planner::sas::soc::TicketLock m; // ロック、書き込みメイン、FIFO の軽量ロックを用いる
         BucketPQ pq;
         std::unordered_map<BucketPQ::Value, Node> store; // node 本体を保存するハッシュマップ (bucket_pq.hpp 自体は ID (uint_32t) の保存しかできない)
-        uint64_t size = 0; // このシャードに入っている Node の個数
+        std::atomic<uint64_t> size{0};
     };
 
     std::vector<Shard> shards_; // シャードを積んだベクタ
-    std::atomic<uint64_t> sz_{0}; // 全体のノードの個数
     uint32_t k_choice_; // pop 時にサンプルするシャードの個数
 
     // 乱数生成器 (スレッドごとに独立)
@@ -218,24 +217,29 @@ public:
             auto id = n.id;
             sh.store.emplace(id, std::move(n)); // ハッシュマップに、ID と ノードを入れる
             sh.pq.insert(id, key); // バケットに挿入する
-            ++sh.size; // シャードに含まれるノード数を増加させる
+            sh.size.fetch_add(1, std::memory_order_relaxed); // シャードに含まれるノード数を増加させる
         }
-        sz_.fetch_add(1, std::memory_order_relaxed); // 全体のノード数を 1 インクリメントする
 
         if (gstats_) {
             auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッドの ID の取得
-            gstats_->per_thread[tid].pushes++; // プッシュ回数を 1 インクリメントする
-            auto s = size(); // 二段バケットに含まれる全ノード数を取得
-            if (s > gstats_->per_thread[tid].max_open_size_seen) { // スレッドごとに観測したオープンリストの最大のサイズを更新する
-                gstats_->per_thread[tid].max_open_size_seen = s;
+            auto& S = gstats_->per_thread[tid];
+            S.pushes++; // プッシュ回数を 1 インクリメントする
+            auto total = size(); // 二段バケットに含まれる全ノード数を取得
+            if (total > S.max_open_size_seen) { // スレッドごとに観測したオープンリストの最大のサイズを更新する
+                S.max_open_size_seen = total;
             }
         }
     }
 
     // pop 関数
-    std::optional<Node> pop(uint32_t qid) { // 引数には、スレッドの ID を用いる
+    std::optional<Node> pop(uint32_t) { // 引数には、スレッドの ID を用いる
         const uint32_t S = static_cast<uint32_t>(shards_.size()); // シャード数
-        if (sz_.load(std::memory_order_relaxed) == 0) { // オープンリストに含まれる全体のノード数が 0 の場合
+
+        if (S == 0) { // シャード数が 0 の場合
+            return std::nullopt;
+        }
+
+        if (size() == 0) { // オープンリストに含まれる全体のノード数が 0 の場合
             return std::nullopt;
         }
 
@@ -243,12 +247,12 @@ public:
 
         // k-choice sampling
         for (uint32_t t = 0; t < k_choice_; ++t) {
-            uint32_t sid = (qid + seed + t) % S; // (thread-id + seed-value + (0~k-1)) をシャード数で割った余り
+            uint32_t sid = (seed + t) % S; // (thread-id + seed-value + (0~k-1)) をシャード数で割った余り
             auto& sh = shards_[sid]; // 該当シャード
 
             // critical section
             planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(sh.m); // ロックを掛ける
-            if (sh.size == 0 || sh.pq.empty()) { // シャードに含まれるノードが 0 この場合
+            if (sh.size.load(std::memory_order_relaxed) == 0 || sh.pq.empty()) { // シャードに含まれるノードが 0 この場合
 
                 if (gstats_) { // 統計値を取っている場合
                     auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
@@ -263,8 +267,7 @@ public:
             if (it != sh.store.end()) { // 見つかった ID がハッシュマップに存在している場合
                 Node out = std::move(it->second); // 該当ノードを取得
                 sh.store.erase(it); // ハッシュマップから、そのノードを削除する
-                --sh.size; // 該当シャードに含まれるノード数を 1 減らす
-                sz_.fetch_sub(1, std::memory_order_relaxed); // 全体のノード数を 1 だけデクリメントする
+                sh.size.fetch_sub(1, std::memory_order_relaxed); // ノードに含まれるノード数を 1 減らす
 
                 if (gstats_) { // 統計値を取っている場合
                     auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
@@ -276,12 +279,13 @@ public:
         }
 
         // ID がハッシュマップに登録されていない場合
-        for (uint32_t sid = 0; sid < S; ++sid) { // 他のシャードを探索する
+        for (uint32_t t = k_choice_; t < (S+k_choice_); ++t) { // 他のシャードを探索する
+            uint32_t sid = (seed + t) % S;
             auto& sh = shards_[sid];
 
             // critical section
             planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(sh.m); // ロックを掛ける
-            if (sh.size == 0 || sh.pq.empty()) {
+            if (sh.size.load(std::memory_order_relaxed) == 0 || sh.pq.empty()) {
                 if (gstats_) { // 統計値を取っている場合
                     auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
                     gstats_->per_thread[tid].bucket_pop_empty_probes++; // 空のシャードを走査してしまったので、その統計値を 1 インクリメントする
@@ -296,8 +300,7 @@ public:
             if (it != sh.store.end()) {
                 Node out = std::move(it->second);
                 sh.store.erase(it);
-                --sh.size;
-                sz_.fetch_sub(1, std::memory_order_relaxed);
+                sh.size.fetch_sub(1, std::memory_order_relaxed);
 
                 if (gstats_) { // 統計値を取っている場合
                     auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
@@ -321,7 +324,13 @@ public:
 
     // 現在の二段バケットに含まれる全ノード数を確認する関数
     uint64_t size() const noexcept {
-        return sz_.load(std::memory_order_relaxed);
+        uint64_t total = 0;
+
+        for (const auto& sh : shards_) {
+            total += sh.size.load(std::memory_order_relaxed);
+        }
+
+        return total;
     }
 };
 
