@@ -177,6 +177,8 @@ public:
     }
 };
 
+inline uint32_t g_run_seed = 634u; // 探索ランダムシード
+
 } // namespace parallel_SOC
 } // namespace sas
 } // namespace planner

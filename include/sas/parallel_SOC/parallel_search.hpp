@@ -26,6 +26,7 @@ struct SearchParams {
     int time_limit_ms = -1; // タイムリミット
     uint32_t num_bucket_shards = 0;
     uint32_t num_k_select = 2;
+    uint32_t random_seed = 634u; // 探索ごとのランダムシード
 };
 
 // 探索結果

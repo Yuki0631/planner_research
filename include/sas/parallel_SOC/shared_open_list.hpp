@@ -42,14 +42,8 @@ class MultiQueueOpen {
 
     // 乱数生成
     static uint32_t rng_next() {
-        thread_local std::mt19937 rng{std::random_device{}()};
-
-        // 乱数の安全性の確保 (uint32_t の最小・最大に合わせてスケーリングを行うオブジェクト)
-        thread_local std::uniform_int_distribution<uint32_t> dist(
-            std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max()
-        );
-
-        return dist(rng);
+        thread_local planner::sas::soc::XorShift32 rng(0x9e3779b9u ^ planner::sas::soc::current_thread_index()*0x85ebca6bu ^ planner::sas::soc::g_run_seed);
+        return rng();
     }
 
     // ノードの ID を用いて、どのシャードに挿入するのかを決定する (乗算ハッシュ)
@@ -102,7 +96,7 @@ public:
 
         // k-choice サンプリングを行う
         for (uint32_t t = 0; t < k_choice_; ++t) {
-            size_t sid = (static_cast<size_t>(seed) + t) % N; // シャード ID を決定する
+            size_t sid = size_t(rng_next()) % N; // シャード ID を決定する
             auto& pq = qs_[sid]; // 該当のシャード
 
             planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m); // ロックをかける
@@ -181,14 +175,8 @@ class TwoLevelBucketOpen {
 
     // 乱数生成器 (スレッドごとに独立)
     static uint32_t rng_next() {
-        thread_local std::mt19937 rng{std::random_device{}()};
-
-        // 乱数の安全性の確保 (uint32_t の最小・最大に合わせてスケーリングを行うオブジェクト)
-        thread_local std::uniform_int_distribution<uint32_t> dist(
-            std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max()
-        );
-
-        return dist(rng);
+        thread_local planner::sas::soc::XorShift32 rng(0x9e3779b9u ^ planner::sas::soc::current_thread_index()*0x85ebca6bu ^ planner::sas::soc::g_run_seed);
+        return rng();
     }
 
     // ID をハッシュ値に変換し、どのシャードに入れるのか選ぶ関数
@@ -259,7 +247,7 @@ public:
 
         // k-choice sampling
         for (uint32_t t = 0; t < k_choice_; ++t) {
-            uint32_t sid = (seed + t) % num_shards; // (thread-id + seed-value + (0~k-1)) をシャード数で割った余り
+            uint32_t sid = rng_next() % num_shards; // (thread-id + seed-value + (0~k-1)) をシャード数で割った余り
             auto& sh = shards_[sid]; // 該当シャード
 
             // critical section

@@ -36,6 +36,8 @@ static std::vector<uint32_t> reconstruct_plan(const std::unordered_map<uint64_t,
 
 // A* 探索の主要部分
 SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::soc::GlobalStats* stats_out) {
+    planner::sas::soc::g_run_seed = (P.random_seed ? P.random_seed : 634u);
+
     const uint32_t N = P.num_threads ? P.num_threads : 1; // スレッドの数
     const uint32_t Q = P.num_queues ? P.num_queues : N; // Queue の数、なければスレッド数と一致させる
     const uint32_t Sh = P.num_bucket_shards ? P.num_bucket_shards : N; // 二段バケットのシャードの数、なければスレッド数と一致させる
