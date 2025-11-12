@@ -81,7 +81,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
         registry.emplace(root.id, root);
     }
 
-    open.push(0, std::move(root)); // オープンリストに push する
+    open.push(std::move(root)); // オープンリストに push する
 
     std::atomic<bool> done{false}; // 探索が終了しているか表すフラグ、複数のスレッドに共有するので、std::atomic を使用する
     std::atomic<uint64_t> goal_node{UINT64_MAX}; // goal node の ID を記録するための atomic 変数
@@ -119,7 +119,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                 break;
             }
 
-            auto item = open.pop(tid);
+            auto item = open.pop();
+            
             if (unlikely(!item.has_value())) { // オープンリストから取り出したノードが無効値の場合
                 become_idle(); // 現在は仕事がないので、アイドリングする
 
@@ -194,7 +195,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                     }
 
                     // オープンリストに挿入
-                    open.push(tid, std::move(nxt));
+                    open.push(std::move(nxt));
                 }
             );
         }

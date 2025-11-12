@@ -67,7 +67,7 @@ public:
     }
 
     // push 関数
-    void push(uint32_t, Node&& n) {
+    void push(Node&& n) {
         const uint32_t N = (uint32_t)qs_.size(); // マルチキューに含まれるキューの数
         const uint32_t sid = pick_shard(n.id, N); // シャード ID
         auto& pq = qs_[sid]; // 該当シャードを参照として確保する
@@ -91,7 +91,7 @@ public:
     }
 
     // pop 関数
-    std::optional<Node> pop([[maybe_unused]] uint32_t qid) {
+    std::optional<Node> pop() {
         const size_t N = qs_.size(); // マルチキューの総数
 
         if (N==0) {
@@ -215,7 +215,7 @@ public:
     }
 
     // push 関数
-    void push(uint32_t, Node&& n) { // 第一引数の Queue-ID はこの関数では無視する
+    void push(Node&& n) { // 第一引数の Queue-ID はこの関数では無視する
         const uint32_t num_shards = static_cast<uint32_t>(shards_.size()); // シャードの数
         const uint32_t sid = pick_shard(n.id, num_shards); // どのシャードにそのノードを入れるかのインデックス
         auto& sh = shards_[sid]; // 該当シャード
@@ -244,7 +244,7 @@ public:
     }
 
     // pop 関数
-    std::optional<Node> pop([[maybe_unsed]] uint32_t qid) { // 引数には、スレッドの ID を用いる
+    std::optional<Node> pop() { // 引数には、スレッドの ID を用いる
         const uint32_t num_shards = static_cast<uint32_t>(shards_.size()); // シャード数
 
         if (num_shards == 0) { // シャード数が 0 の場合
@@ -368,18 +368,18 @@ public:
     {}
 
     // push 関数
-    void push(uint32_t qid, Node&& n) {
+    void push(Node&& n) {
         switch (kind_) {
-            case Kind::MultiQueue: mq_.push(qid, std::move(n)); break;
-            case Kind::TwoLevelBucket: tlb_.push(qid, std::move(n)); break;
+            case Kind::MultiQueue: mq_.push(std::move(n)); break;
+            case Kind::TwoLevelBucket: tlb_.push(std::move(n)); break;
         }
     }
 
     // pop 関数
-    std::optional<Node> pop(uint32_t qid) {
+    std::optional<Node> pop() {
         switch (kind_) {
-            case Kind::MultiQueue: return mq_.pop(qid);
-            case Kind::TwoLevelBucket: return tlb_.pop(qid);
+            case Kind::MultiQueue: return mq_.pop();
+            case Kind::TwoLevelBucket: return tlb_.pop();
         }
         return std::nullopt; // 何も返ってこなかった場合
     }
