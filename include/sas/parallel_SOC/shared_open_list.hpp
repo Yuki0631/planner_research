@@ -43,7 +43,13 @@ class MultiQueueOpen {
     // 乱数生成
     static uint32_t rng_next() {
         thread_local std::mt19937 rng{std::random_device{}()};
-        return rng();
+
+        // 乱数の安全性の確保 (uint32_t の最小・最大に合わせてスケーリングを行うオブジェクト)
+        thread_local std::uniform_int_distribution<uint32_t> dist(
+            std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max()
+        );
+
+        return dist(rng);
     }
 
     // ノードの ID を用いて、どのシャードに挿入するのかを決定する (乗算ハッシュ)
@@ -85,8 +91,8 @@ public:
     }
 
     // pop 関数
-    std::optional<Node> pop(uint32_t qid) {
-        const uint32_t N = qs_.size(); // マルチキューの総数
+    std::optional<Node> pop([[maybe_unused]] uint32_t qid) {
+        const size_t N = qs_.size(); // マルチキューの総数
 
         if (N==0) {
             return std::nullopt;
@@ -96,7 +102,7 @@ public:
 
         // k-choice サンプリングを行う
         for (uint32_t t = 0; t < k_choice_; ++t) {
-            uint32_t sid = (seed + t) % N; // シャード ID を決定する
+            size_t sid = (static_cast<size_t>(seed) + t) % N; // シャード ID を決定する
             auto& pq = qs_[sid]; // 該当のシャード
 
             planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m); // ロックをかける
@@ -115,8 +121,8 @@ public:
         }
 
         // k-choice で発見できなかった場合は、すべてのシャードを走査する
-        for (uint32_t t = k_choice_; t < (N + k_choice_); ++t) {
-            uint32_t sid = (seed + t) % N;
+        for (size_t t = k_choice_; t < (N + k_choice_); ++t) {
+            size_t sid = (static_cast<size_t>(seed) + t) % N;
             auto& pq = qs_[sid];
 
             planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m);
@@ -176,7 +182,13 @@ class TwoLevelBucketOpen {
     // 乱数生成器 (スレッドごとに独立)
     static uint32_t rng_next() {
         thread_local std::mt19937 rng{std::random_device{}()};
-        return rng();
+
+        // 乱数の安全性の確保 (uint32_t の最小・最大に合わせてスケーリングを行うオブジェクト)
+        thread_local std::uniform_int_distribution<uint32_t> dist(
+            std::numeric_limits<uint32_t>::min(), std::numeric_limits<uint32_t>::max()
+        );
+
+        return dist(rng);
     }
 
     // ID をハッシュ値に変換し、どのシャードに入れるのか選ぶ関数
@@ -204,8 +216,8 @@ public:
 
     // push 関数
     void push(uint32_t, Node&& n) { // 第一引数の Queue-ID はこの関数では無視する
-        const uint32_t S = static_cast<uint32_t>(shards_.size()); // シャードの数
-        const uint32_t sid = pick_shard(n.id, S); // どのシャードにそのノードを入れるかのインデックス
+        const uint32_t num_shards = static_cast<uint32_t>(shards_.size()); // シャードの数
+        const uint32_t sid = pick_shard(n.id, num_shards); // どのシャードにそのノードを入れるかのインデックス
         auto& sh = shards_[sid]; // 該当シャード
 
         const int h = n.h; // h-value
@@ -222,20 +234,20 @@ public:
 
         if (gstats_) {
             auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッドの ID の取得
-            auto& S = gstats_->per_thread[tid];
-            S.pushes++; // プッシュ回数を 1 インクリメントする
+            auto& stats = gstats_->per_thread[tid];
+            stats.pushes++; // プッシュ回数を 1 インクリメントする
             auto total = size(); // 二段バケットに含まれる全ノード数を取得
-            if (total > S.max_open_size_seen) { // スレッドごとに観測したオープンリストの最大のサイズを更新する
-                S.max_open_size_seen = total;
+            if (total > stats.max_open_size_seen) { // スレッドごとに観測したオープンリストの最大のサイズを更新する
+                stats.max_open_size_seen = total;
             }
         }
     }
 
     // pop 関数
-    std::optional<Node> pop(uint32_t) { // 引数には、スレッドの ID を用いる
-        const uint32_t S = static_cast<uint32_t>(shards_.size()); // シャード数
+    std::optional<Node> pop([[maybe_unsed]] uint32_t qid) { // 引数には、スレッドの ID を用いる
+        const uint32_t num_shards = static_cast<uint32_t>(shards_.size()); // シャード数
 
-        if (S == 0) { // シャード数が 0 の場合
+        if (num_shards == 0) { // シャード数が 0 の場合
             return std::nullopt;
         }
 
@@ -247,7 +259,7 @@ public:
 
         // k-choice sampling
         for (uint32_t t = 0; t < k_choice_; ++t) {
-            uint32_t sid = (seed + t) % S; // (thread-id + seed-value + (0~k-1)) をシャード数で割った余り
+            uint32_t sid = (seed + t) % num_shards; // (thread-id + seed-value + (0~k-1)) をシャード数で割った余り
             auto& sh = shards_[sid]; // 該当シャード
 
             // critical section
@@ -279,8 +291,8 @@ public:
         }
 
         // ID がハッシュマップに登録されていない場合
-        for (uint32_t t = k_choice_; t < (S+k_choice_); ++t) { // 他のシャードを探索する
-            uint32_t sid = (seed + t) % S;
+        for (uint32_t t = k_choice_; t < (num_shards + k_choice_); ++t) { // 他のシャードを探索する
+            uint32_t sid = (seed + t) % num_shards;
             auto& sh = shards_[sid];
 
             // critical section
@@ -304,10 +316,10 @@ public:
 
                 if (gstats_) { // 統計値を取っている場合
                     auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
-                    auto &S = gstats_->per_thread[tid];
-                    S.pops++; // ポップできた回数を 1 インクリメントする
+                    auto &stats = gstats_->per_thread[tid];
+                    stats.pops++; // ポップできた回数を 1 インクリメントする
                     if (sid != tid) {
-                        S.steals++;   
+                        stats.steals++;   
                     }
                 }
             
