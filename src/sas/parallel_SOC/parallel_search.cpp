@@ -125,8 +125,21 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                 become_idle(); // 現在は仕事がないので、アイドリングする
 
                 if (open.empty() && active_workrs.load(std::memory_order_acquire) == 0) { // オープンリスト (全体) が空かつどのスレッドもアイドル状態の時
-                    done.store(true, std::memory_order_release);
-                    break;
+                    Backoff bk;
+
+                    // 二段階で確認するために、数マイクロ秒ほどポーズする
+                    for (int retry = 0; retry < 32; ++retry) {
+                        if (unlikely(open.empty() && active_workrs.load(std::memory_order_acquire) != 0)) {
+                            break;
+                        }
+                        bk.pause();
+                    }
+
+                    if (open.empty() && active_workrs.load(std::memory_order_acquire) == 0) {
+                        done.store(true, std::memory_order_release);
+                        break;
+                    }
+
                 }
 
                 std::this_thread::yield(); // 他のスレッドに譲る
