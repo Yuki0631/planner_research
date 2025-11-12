@@ -34,32 +34,52 @@ class MultiQueueOpen {
     struct PQ {
         std::priority_queue<Node, std::vector<Node>, NodeLess> q; // Node を要素とし、比較関数は、NodeLess とする (node.hpp)
         planner::sas::soc::SpinLock m; // 軽量ロック、書き込みメイン
+        std::atomic<uint64_t> size{0}; // 各優先度付きキューのサイズ
     };
 
     std::vector<PQ> qs_; // PQ を積んだベクトル
-    std::atomic<uint64_t> sz_{0}; // 全体のサイズを数え上げるカウンタ
+    uint32_t k_choice_; // pop 時にランダムサンプリングするキューの数
+
+    // 乱数生成
+    static uint32_t rng_next() {
+        thread_local std::mt19937 rng{std::random_device{}()};
+        return rng();
+    }
+
+    // ノードの ID を用いて、どのシャードに挿入するのかを決定する (乗算ハッシュ)
+    static uint32_t pick_shard(uint64_t id, uint32_t n) {
+        uint64_t x = id * 11400714819323198485ull;
+        return (uint32_t)((x >> 32) % n);
+    }
 
 public:
-    explicit MultiQueueOpen(uint32_t num_queues) : qs_(num_queues ? num_queues : 1) {} // コンストラクタ、キューの数を num_queues or 1 に設定する
+    explicit MultiQueueOpen(uint32_t num_queues, uint32_t k_choice = 2) 
+    : qs_(num_queues ? num_queues : 1) 
+    , k_choice_(k_choice ? k_choice : 2) {} // コンストラクタ、キューの数とランダムサンプリング数を設定する
     void set_stats(planner::sas::soc::GlobalStats* p) {
         gstats_ = p;
     }
 
     // push 関数
-    void push(uint32_t qid, Node&& n) {
-        auto& pq = qs_[qid % qs_.size()]; // priority queue のインデックスは、ID をキューの総数で割った時の余りとする
+    void push(uint32_t, Node&& n) {
+        const uint32_t N = (uint32_t)qs_.size(); // マルチキューに含まれるキューの数
+        const uint32_t sid = pick_shard(n.id, N); // シャード ID
+        auto& pq = qs_[sid]; // 該当シャードを参照として確保する
+
         // critical section
         {
             planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m); // その priority queue をロックする
             pq.q.push(std::move(n)); // Queue に値を入れる
+            pq.size.fetch_add(1, std::memory_order_relaxed); // キューに含まれる要素の数を 1 インクリメントする
         }
-        sz_.fetch_add(1, std::memory_order_relaxed); // 全体のノードの数を 1 だけインクリメントする
+        
         if (gstats_) {
             auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッドの ID の取得
-            gstats_ ->per_thread[tid].pushes++; // プッシュした回数を 1 インクリメントする
+            auto& S = gstats_->per_thread[tid];
+            S.pushes++; // プッシュした回数を 1 インクリメントする
             auto s = size();
-            if (s > gstats_->per_thread[tid].max_open_size_seen) { // スレッドごとに観測したオープンサイズの最大のサイズを更新する
-                gstats_->per_thread[tid].max_open_size_seen = s;
+            if (s >S.max_open_size_seen) { // スレッドごとに観測したオープンサイズの最大のサイズを更新する
+                S.max_open_size_seen = s;
             }
         }
     }
@@ -67,44 +87,53 @@ public:
     // pop 関数
     std::optional<Node> pop(uint32_t qid) {
         const uint32_t N = qs_.size(); // マルチキューの総数
-        bool stole = false;
 
-        // ID が担当しているキューからの取り出し
-        {
-            auto& pq = qs_[qid % N]; // ID から計算されるインデックスのキュー
-            planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m); // ロックを行う
-            if (!pq.q.empty()) { // キューが空でない場合
-                Node n = std::move(const_cast<Node&>(pq.q.top())); // top()
-                pq.q.pop(); // pop()
-                sz_.fetch_sub(1, std::memory_order_relaxed); // 全体のノードの数を 1 だけデクリメントする
-
-                if (gstats_) { // 統計を取っている場合
-                    auto tid = planner::sas::soc::current_thread_index();
-                    gstats_->per_thread[tid].pops++; // ポップした回数を 1 インクリメントする
-                }
-                return n;
-            }
+        if (N==0) {
+            return std::nullopt;
         }
 
-        // ID が担当しているキューが空の場合、他のキューから盗み取る
-        for (uint32_t t=0; t<N; ++t) {
-            uint32_t k = (qid + 1 + t) % N; // 担当以外のキューのインデックスを計算する
-            auto& pq = qs_[k];
-            std::lock_guard lg(pq.m); // ロックを行う
-            if (!pq.q.empty()) { // そのキューがから出ない場合
-                Node n = std::move(const_cast<Node&>(pq.q.top())); // top()
-                pq.q.pop(); // pop()
-                sz_.fetch_sub(1, std::memory_order_relaxed); // 全体のノード数を 1 だけデクリメントする。
+        uint32_t seed = rng_next(); // シード値の設定
+
+        // k-choice サンプリングを行う
+        for (uint32_t t = 0; t < k_choice_; ++t) {
+            uint32_t sid = (seed + t) % N; // シャード ID を決定する
+            auto& pq = qs_[sid]; // 該当のシャード
+
+            planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m); // ロックをかける
+
+            if (!pq.q.empty()) { // キューが空でない場合
+                Node n = std::move(const_cast<Node&>(pq.q.top()));
+                pq.q.pop();
+                pq.size.fetch_sub(1, std::memory_order_relaxed);
 
                 if (gstats_) {
-                    auto tid = planner::sas::soc::current_thread_index(); // 現在のスレッド ID の取得
-                    auto& S = gstats_->per_thread[tid];
-                    S.pops++; // ポップした回数を 1 インクリメントする
-                    S.steals++; // 担当以外のキューからもノードを取ることができたので、steals を 1 インクリメントする
+                    auto tid = planner::sas::soc::current_thread_index();
+                    gstats_->per_thread[tid].pops++;
                 }
                 return n;
             }
         }
+
+        // k-choice で発見できなかった場合は、すべてのシャードを走査する
+        for (uint32_t t = 0; t < N; ++t) {
+            uint32_t sid = (seed + t) % N;
+            auto& pq = qs_[sid];
+
+            planner::sas::soc::ScopedLock<planner::sas::soc::SpinLock> lg(pq.m);
+
+            if (!pq.q.empty()) {
+                Node n = std::move(const_cast<Node&>(pq.q.top()));
+                pq.q.pop();
+                pq.size.fetch_sub(1, std::memory_order_relaxed);
+
+                if (gstats_) {
+                    auto tid = planner::sas::soc::current_thread_index();
+                    gstats_->per_thread[tid].pops++;
+                }
+                return n;
+            }
+        }
+
         // どのキューも空の場合
         return std::nullopt;
     }
@@ -116,7 +145,13 @@ public:
 
     // 全体のノード数を取得する関数
     uint64_t size() const noexcept {
-        return sz_.load(std::memory_order_relaxed);
+        uint64_t s = 0;
+
+        for (const auto& pq : qs_) {
+            s += pq.size.load(std::memory_order_relaxed); // すべてのキューのサイズを足し合わせる
+        }
+
+        return s;
     }
 
 };
