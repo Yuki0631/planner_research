@@ -3,6 +3,7 @@
 #include <atomic>
 #include <limits>
 #include <unordered_map>
+#include <cmath>
 
 // コンパイラに対するヒントのためのマクロ変数
 #define likely(x)   __builtin_expect(!!(x), 1) // よく起こりやすい条件分岐
@@ -66,7 +67,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     root.id = ids.alloc();
     root.g = 0;
     uint64_t first_relax_eval_ns = planner::sas::soc::measure_ns_and_run([&](){
-                        root.h = hfn(T, T.init);
+                        root.h = static_cast<int>(std::lround(hfn(T, T.init)));
                     });
     root.op_id  = std::numeric_limits<uint32_t>::max();
     root.parent = std::numeric_limits<uint64_t>::max();
@@ -180,7 +181,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
                     // h-value の計算時間を測定しつつ算出する
                     S.relax_eval_ns += planner::sas::soc::measure_ns_and_run([&](){
-                        nxt.h = hfn(T, succ);
+                        nxt.h = static_cast<int>(std::lround(hfn(T, succ)));
                     });
 
                     S.evaluated++; 
