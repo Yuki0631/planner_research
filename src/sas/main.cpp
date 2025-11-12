@@ -10,6 +10,7 @@
 #include <sstream>
 #include <functional>
 #include <fstream>
+#include <cmath>
 
 #include "sas/sas_reader.hpp"
 #include "sas/sas_search.hpp"
@@ -317,7 +318,7 @@ int main(int argc, char** argv) {
             solved = R.solved;
             if (solved) {
                 plan_ops_out = R.plan;
-                plan_cost_out = planner::sas::eval_plan_cost(T, R.plan);
+                plan_cost_out = static_cast<int>(std::lround(planner::sas::eval_plan_cost(T, R.plan)));
             }
 
         } else if (algo == "gbfs") {
@@ -332,7 +333,7 @@ int main(int argc, char** argv) {
             solved = R.solved;
             if (solved) {
                 plan_ops_out = R.plan;
-                plan_cost_out = planner::sas::eval_plan_cost(T, R.plan);
+                plan_cost_out = static_cast<int>(std::lround(planner::sas::eval_plan_cost(T, R.plan)));
             }
 
         } else if (algo == "soc_astar") {
@@ -381,7 +382,11 @@ int main(int argc, char** argv) {
             std::cout << "Pops: " << total.pops << "\n";
             std::cout << "Steals: " << total.steals << "\n";
             std::cout << "Bucket empty probes: " << total.bucket_pop_empty_probes << "\n";
-            std::cout << "Evaluation time: " << (total.relax_eval_ns/1e9) << " s\n";
+            {
+                using namespace std::chrono;
+                const double secs = duration<double>(nanoseconds(total.relax_eval_ns)).count();
+                std::cout << "Evaluation time: " << secs << " s\n";
+            }
             std::cout << "Max open size: "  << total.max_open_size_seen << "\n";
             std::cout << "\n";
             
@@ -397,7 +402,11 @@ int main(int argc, char** argv) {
                 std::cout << "Pops: " << GS.per_thread[i].pops << "\n";
                 std::cout << "Steals: " << GS.per_thread[i].steals << "\n";
                 std::cout << "Bucket empty probes: " << GS.per_thread[i].bucket_pop_empty_probes << "\n";
-                std::cout << "Evaluation time: " << (GS.per_thread[i].relax_eval_ns/1e9) << " s\n";
+                {
+                using namespace std::chrono;
+                const double secs = duration<double>(nanoseconds(total.relax_eval_ns)).count();
+                std::cout << "Evaluation time: " << secs << " s\n";
+                }
                 std::cout << "Max open size: "  << GS.per_thread[i].max_open_size_seen << "\n";
                 std::cout << "\n";
             }
