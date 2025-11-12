@@ -221,7 +221,6 @@ public:
 
     // insert 関数
     void insert(Value v, Key k) {
-        if (k < 0) k = 0;
 
         // Key と Value がコンテナに入るように調整する
         ensure_buckets_(static_cast<uint32_t>(k));
@@ -272,8 +271,11 @@ public:
 
     // 値 v が入っているか確認数る関数
     bool contains(Value v) const {
-        if (v < 0 || static_cast<uint32_t>(v) >= pos_.size()) return false;
-        return pos_[static_cast<uint32_t>(v)].present;
+        const size_t vi = static_cast<size_t>(v);
+        if (vi >= pos_.size()) {
+            return false;
+        }
+        return pos_[static_cast<uint32_t>(vi)].present;
     }
 
     // 値 v を削除する関数
@@ -379,7 +381,6 @@ private:
     // Key を更新する関数
     void change_key_(Value v, Key new_key, bool allow_increase) {
         assert(contains(v) && "change_key_: value not present");
-        if (new_key < 0) new_key = 0;
 
         // Value を基に Position Structure を取得する
         auto &p = pos_[static_cast<uint32_t>(v)];
