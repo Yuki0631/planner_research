@@ -352,6 +352,9 @@ int main(int argc, char** argv) {
             // キューの数の調整
             sp.num_queues = (soc_queues > 0) ? (uint32_t)soc_queues : sp.num_threads;
 
+            // ランダム k-choice の調整
+            sp.num_k_select = (soc_k > 0) ? (uint32_t)soc_queues : 2;
+
             // CPU リミットの調整 (ただし、並列探索の time_limit_ms に合うように 1000 を掛ける)
             sp.time_limit_ms = (opt_search_cpu_limit_sec > 0) ? (int)std::llround(opt_search_cpu_limit_sec * 1000.0) : -1;
 
