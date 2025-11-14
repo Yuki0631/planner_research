@@ -65,6 +65,11 @@ public:
         }
         return tbl_[id];
     }
+
+    void initialize() {
+        std::lock_guard<std::mutex> lk(m_); // ロックを掛ける
+        tbl_.resize(1 << 10); // ベクタのサイズを 2^10 に初期化する
+    }
 };
 
 static std::vector<uint32_t> reconstruct_plan(const ParentStore& parents, uint64_t goal_id) {
@@ -100,6 +105,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     SharedOpen open(P.open_kind, Q, Sh, K); // オープンリスト
     Termination term(P.time_limit_ms); // 時間制限
 
+    ParentStore parents; // 解復元用の親ノードと適用演算子の情報を登録したテーブル
+
     // 統計値の取得
     planner::sas::soc::GlobalStats GS;
     GS.resize(N); // スレッドの数だけ容量を確保する
@@ -124,6 +131,9 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                     });
     root.op_id  = std::numeric_limits<uint32_t>::max();
     root.parent = std::numeric_limits<uint64_t>::max();
+
+    parents.initialize(); // ベクタのサイズの初期化
+    parents.set(root.id, root.parent, root.op_id); // ParentStore に登録する
 
     store.put(root.id, T.init); // ルートノードの ID と state をマップに挿入する
     closed.prune_or_update(T.init, root.g, root.id);
@@ -255,6 +265,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
                     store.put(nxt.id, succ); // state のコピーの作成
 
+                    parents.set(nxt.id, nxt.parent, nxt.op_id); // ParentStore に state の情報を登録する
+
                     {
                         // planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(reg_mtx); // ロックをかける
                         // registry.emplace(nxt.id, nxt); // ノードの登録
@@ -297,9 +309,12 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
     if (goal_node.load() != UINT64_MAX) { // ゴールノードが発見された場合
         R.solved = true;
-        // auto plan = reconstruct_plan(registry, goal_node.load());
-        std::vector<uint32_t> plan;
+
+        // 解を復元する
+        const uint64_t gid = goal_node.load(std::memory_order_acquire);
+        auto plan = reconstruct_plan(parents, gid);
         R.plan_ops = std::move(plan);
+
         int cost = 0;
         for (auto oi : R.plan_ops) {
             cost += T.ops[oi].cost;
