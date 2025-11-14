@@ -40,7 +40,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
     const uint32_t N = P.num_threads ? P.num_threads : 1; // スレッドの数
     const uint32_t Q = P.num_queues ? P.num_queues : N; // Queue の数、なければスレッド数と一致させる
-    const uint32_t Sh = P.num_bucket_shards ? P.num_bucket_shards : N; // 二段バケットのシャードの数、なければスレッド数と一致させる
+    const uint32_t Sh = N*4; // スレッド数の 4 倍に設定する
     const uint32_t K = P.num_k_select ? P.num_k_select : 2; // 二段バケットの k-choice の選択数パラメタ
 
     IdAllocator ids; // ID 生成器
@@ -61,8 +61,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
     // 解の復元のための、遭遇したノードを記録するテーブル
     planner::sas::soc::TicketLock reg_mtx; // テーブルのためのロック (軽量 FIFO ロック)
-    std::unordered_map<uint64_t, Node> registry; // ID と ノードを対応させるハッシュマップ
-    registry.reserve(1<<24); // あらかじめ 2^24 の要素を確保しておく
+    // std::unordered_map<uint64_t, Node> registry; // ID と ノードを対応させるハッシュマップ
+    // registry.reserve(1<<24); // あらかじめ 2^24 の要素を確保しておく
 
     // ルートノード
     Node root;
@@ -79,8 +79,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
     // critical section (ノード記録表に登録)
     {
-        planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(reg_mtx); // ロックをかける
-        registry.emplace(root.id, root);
+        // planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(reg_mtx); // ロックをかける
+        // registry.emplace(root.id, root);
     }
 
     open.push(std::move(root)); // オープンリストに push する
@@ -205,8 +205,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
                     store.put(nxt.id, succ); // state のコピーの作成
 
                     {
-                        planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(reg_mtx); // ロックをかける
-                        registry.emplace(nxt.id, nxt); // ノードの登録
+                        // planner::sas::soc::ScopedLock<planner::sas::soc::TicketLock> lg(reg_mtx); // ロックをかける
+                        // registry.emplace(nxt.id, nxt); // ノードの登録
                     }
 
                     // オープンリストに挿入
@@ -246,7 +246,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
 
     if (goal_node.load() != UINT64_MAX) { // ゴールノードが発見された場合
         R.solved = true;
-        auto plan = reconstruct_plan(registry, goal_node.load());
+        // auto plan = reconstruct_plan(registry, goal_node.load());
+        std::vector<uint32_t> plan;
         R.plan_ops = std::move(plan);
         int cost = 0;
         for (auto oi : R.plan_ops) {
