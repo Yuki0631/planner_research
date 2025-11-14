@@ -13,26 +13,77 @@ namespace planner {
 namespace sas {
 namespace parallel_SOC {
 
+// registry を用いた解の復元では、競合が多く発生してしまうので、コメントアウトしておく
 // 適用したactionを構築する関数
-static std::vector<uint32_t> reconstruct_plan(const std::unordered_map<uint64_t, Node>& nodes, uint64_t goal_id)
-{
-    std::vector<uint32_t> ops; // 演算子を積むためのベクタ
-    uint64_t cur = goal_id;
-    while (true) {
-        auto it = nodes.find(cur);
-        if (it == nodes.end()) { // ハッシュマップで指定の id が見つからなかった場合
-            break;
+// static std::vector<uint32_t> reconstruct_plan(const std::unordered_map<uint64_t, Node>& nodes, uint64_t goal_id)
+// {
+//     std::vector<uint32_t> ops; // 演算子を積むためのベクタ
+//     uint64_t cur = goal_id;
+//     while (true) {
+//         auto it = nodes.find(cur);
+//         if (it == nodes.end()) { // ハッシュマップで指定の id が見つからなかった場合
+//             break;
+//         }
+//         const Node& n = it->second;
+//         if (n.parent == UINT64_MAX) { // もし親が規定値ならば (スタートノードならば)
+//             break;
+//         }
+//         ops.push_back(n.op_id); // 演算子をベクタに積む
+//         cur = n.parent; // 現在見ているノード id を更新する
+//     }
+//     std::reverse(ops.begin(), ops.end()); // 最初から最後にするため、std::reverseを用いる
+//     return ops; // プランを返す
+// }
+
+struct ParentInfo {
+    uint64_t parent = UINT64_MAX; // 親ノード ID
+    uint32_t op_id = std::numeric_limits<uint32_t>::max(); // 適用演算子 ID
+};
+
+class ParentStore {
+    mutable std::mutex m_; // resize 時に必要なロック
+    std::vector<ParentInfo> tbl_;
+
+public:
+    // 親ノード ID と適用演算子 ID をセットする関数
+    void set(uint64_t id, uint64_t parent, uint32_t op_id) {
+        // 必要なら拡張を行う
+        if (id >= tbl_.size()) { // 表のサイズよりもノード ID が大きい場合
+            std::lock_guard<std::mutex> lk(m_); // ロックを掛ける
+            if (id >= tbl_.size()) {
+                tbl_.resize(id * 2);
+            }
         }
-        const Node& n = it->second;
-        if (n.parent == UINT64_MAX) { // もし親が規定値ならば (スタートノードならば)
-            break;
-        }
-        ops.push_back(n.op_id); // 演算子をベクタに積む
-        cur = n.parent; // 現在見ているノード id を更新する
+
+        tbl_[id].parent = parent;
+        tbl_[id].op_id = op_id;
     }
-    std::reverse(ops.begin(), ops.end()); // 最初から最後にするため、std::reverseを用いる
-    return ops; // プランを返す
+
+    ParentInfo get(uint64_t id) const {
+        if (id >= tbl_.size()) { // 万が一登録していない ID を尋ねられた場合
+            return ParentInfo{}; // 空の PageInfo を返す
+        }
+        return tbl_[id];
+    }
+};
+
+static std::vector<uint32_t> reconstruct_plan(const ParentStore& parents, uint64_t goal_id) {
+    std::vector<uint32_t> ops;
+    uint64_t cur = goal_id;
+
+    while (true) {
+        ParentInfo info = parents.get(cur);
+        if (info.parent == UINT64_MAX) { // ルートノードに到達した場合
+            break;
+        }
+        ops.push_back(info.op_id);
+        cur = info.parent;
+    }
+
+    std::reverse(ops.begin(), ops.end());
+    return ops;
 }
+
 
 // A* 探索の主要部分
 SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::soc::GlobalStats* stats_out) {
@@ -60,7 +111,7 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     StateStore store(std::max<uint32_t>(2048, N*128)); // ID と状態を対応させるハッシュマップ、2048 と N*128 で大きい方が分割数となる
 
     // 解の復元のための、遭遇したノードを記録するテーブル
-    planner::sas::soc::TicketLock reg_mtx; // テーブルのためのロック (軽量 FIFO ロック)
+    // planner::sas::soc::TicketLock reg_mtx; // テーブルのためのロック (軽量 FIFO ロック)
     // std::unordered_map<uint64_t, Node> registry; // ID と ノードを対応させるハッシュマップ
     // registry.reserve(1<<24); // あらかじめ 2^24 の要素を確保しておく
 
