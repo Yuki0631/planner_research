@@ -93,6 +93,7 @@ static inline bool is_goal(const Task& T, const State& s) {
 
 // 適用判定
 static inline bool is_applicable(const Task& T, const State& s, const Operator& op) {
+    (void)T; // 現状では未使用
     // prevail 条件
     for (auto [v,val] : op.prevail) {
         if (s[v] != val) {
@@ -135,6 +136,7 @@ static inline void undo_to(State& s, Undo& u, std::size_t mark) {
 }
 
 static inline void apply_inplace(const Task& T, const Operator& op, State& s, Undo& u) {
+    (void)T; // 現状では未使用
     // 代入効果：var := post
     for (const auto& pp : op.pre_posts) {
         int var  = std::get<1>(pp);
@@ -538,10 +540,8 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
                 return open_norm.extract_min();
             };
 
-            auto [id32, key] = pick();
-            const int u = static_cast<int>(id32);
-            const int hu = unpack_f(key);
-            const int gu = unpack_h(key);
+            auto picked = pick();
+            const int u = static_cast<int>(picked.first);
 
             const State su = R.nodes[u].s;
 
@@ -619,9 +619,10 @@ Result gbfs(const Task& T, HeuristicFn h, const bool h_int, const Params& p) {
         auto cmp = [](const QEl& a, const QEl& b){
             if (a.h != b.h) {
                 return a.h > b.h;
-                return a.g > b.g;
             }
+            return a.g > b.g;
         };
+
         std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open_pref(cmp);
         std::priority_queue<QEl, std::vector<QEl>, decltype(cmp)> open_norm(cmp);
 
