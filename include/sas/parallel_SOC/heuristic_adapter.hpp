@@ -34,6 +34,10 @@ static Heuristic blind() { // blind() をメンバ変数に持つ Heuristic obje
     return Heuristic(planner::sas::blind());
 }
 
+static Heuristic hff(const Task& task) {
+    return Heuristic(planner::sas::hff(task));
+}
+
 };
 
 } // namespace parallel_SOC
