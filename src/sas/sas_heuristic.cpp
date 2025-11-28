@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <limits>
 #include <cmath>
+#include <iostream>
 
 namespace planner { namespace sas {
 
@@ -384,11 +385,13 @@ struct LMData {
 
         // ゴール状態で満たされるべき事実をランドマークに登録する
         std::vector<bool> is_landmark_fact(nfacts, false); // landmark fact かどうか登録するベクタ
+        std::cout << "goal facts" << "\n"; // デバッグ用
         for (auto [v, val] : task.goal) {
             int g = fact_id(v, val);
             if (0 <= g && g < nfacts && !is_landmark_fact[g]) { // fact-id が定義内にある かつ 事前に landmark fact に登録されていない
                 is_landmark_fact[g] = true;
                 landmarks.push_back(Landmark{ g, 1.0 });
+                std::cout << "goal landmark fact: " << g << "\n"; // デバッグ用
             }
         }
 
@@ -453,6 +456,7 @@ struct LMData {
                 is_landmark_fact[p] = true; // ランドマークの判定用ベクタに登録する
 
                 landmarks.push_back(Landmark{ p, 1.0 }); // landmark facts に登録する
+                std::cout << "add a landmark fact: " << p << "\n"; // デバッグ用
             }
         }
     }
