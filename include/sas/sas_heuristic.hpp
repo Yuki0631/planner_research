@@ -5,9 +5,10 @@
 namespace planner { namespace sas {
     using HeuristicFn = std::function<double(const planner::sas::Task&, const State&)>;
 
-    HeuristicFn goalcount();
-    HeuristicFn blind();
-    HeuristicFn hff(const Task& T);
+    HeuristicFn goalcount(); // ゴールカウント
+    HeuristicFn blind(); // ブラインド
+    HeuristicFn hff(const Task& T); // FF
+    HeuristicFn hlm(const Task& T); // ランドマーク
 
 
 }}

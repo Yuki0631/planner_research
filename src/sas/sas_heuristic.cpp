@@ -274,10 +274,227 @@ struct FFData {
 
 } // anonymous namespace
 
+// ランドマークヒューリスティック用のデータ構造
+struct LMData {
+    const Task* T;
+
+    int nvars = 0; // 変数の数
+    int nfacts = 0; // fact の数 (変数の数 x 平均ドメインサイズ)
+
+    std::vector<int> var_offset; // fact_id(v,val) = var_offset[v] + val
+
+    // fact-id から変数名とドメイン値を高速に見つけるためのベクタ
+    std::vector<int> fact_var;
+    std::vector<int> fact_val;
+
+    // landmark-fact 用のデータ構造
+    struct Landmark {
+        int fact; // fact-id
+        double weight; // コスト
+    };
+
+    std::vector<Landmark> landmarks;
+
+    // コンストラクタ
+    LMData(const Task& task) : T(&task) { // プランニングタスクを受け取り、T にポインタを保管する
+        // fact-id の割り振り
+        nvars = static_cast<int>(task.vars.size());
+        var_offset.resize(nvars + 1);
+
+        int counter = 0;
+        for (int v = 0; v < nvars; ++v) {
+            var_offset[v] = counter;
+            counter += task.vars[v].domain;
+        }
+        var_offset[nvars] = counter;
+        nfacts = counter;
+
+        fact_var.resize(nfacts);
+        fact_val.resize(nfacts);
+
+        for (int v = 0; v < nvars; ++v) {
+            for (int d = 0; d < task.vars[v].domain; ++d) {
+                int f = var_offset[v] + d;
+                // 変数とドメイン値用のベクタへの登録
+                fact_var[f] = v;
+                fact_val[f] = d;
+            }
+        }
+
+        // fact-id を求める関数
+        auto fact_id = [&](int v, int val) {
+            return var_offset[v] + val;
+        };
+
+        // 初期状態で真な fact を登録する
+        std::vector<bool> fact_in_init(nfacts, false);
+
+        for (int v = 0; v < nvars; ++v) {
+            int val = task.init[v];
+            int f = fact_id(v, val);
+            if (0 <= f && f < nfacts) {
+                fact_in_init[f] = true;
+            }
+        }
+
+        // 各演算子の、前提 fact(s) と追加 fact(s) を計算、登録する
+        // 演算子情報を登録するためのデータ構造
+        struct ActionInfo {
+            std::vector<int> pre; // prevail, conds, pre の fact-id を積むためのベクタ
+        };
+
+        std::vector<ActionInfo> act_info(task.ops.size());
+
+        std::vector<std::vector<int>> achievers(nfacts); // ある fact を達成するための演算子の集合を積んだベクタ
+
+        for (int a = 0; a < (int)task.ops.size(); ++a) {
+            const auto& op = task.ops[a];
+            auto& info = act_info[a];
+
+            // prevail 条件を action info に登録する
+            for (auto [v, val] : op.prevail) {
+                info.pre.push_back(fact_id(v, val));
+            }
+
+            // pre_posts の前提条件を同様に登録する
+            for (const auto& pp : op.pre_posts) {
+                const auto& conds = std::get<0>(pp);
+                int var  = std::get<1>(pp);
+                int pre  = std::get<2>(pp);
+                int post = std::get<3>(pp);
+
+                for (auto [cv, cval] : conds) {
+                    info.pre.push_back(fact_id(cv, cval));
+                }
+
+                if (pre >= 0) {
+                    info.pre.push_back(fact_id(var, pre));
+                }
+
+                int q = fact_id(var, post);
+                if (0 <= q && q < nfacts) {
+                    achievers[q].push_back(a);
+                }
+            }
+
+            // action info の前提条件の重複除去を行う
+            std::sort(info.pre.begin(), info.pre.end());
+            info.pre.erase(std::unique(info.pre.begin(), info.pre.end()), info.pre.end());
+        }
+
+        // ゴール状態で満たされるべき事実をランドマークに登録する
+        std::vector<bool> is_landmark_fact(nfacts, false); // landmark fact かどうか登録するベクタ
+        for (auto [v, val] : task.goal) {
+            int g = fact_id(v, val);
+            if (0 <= g && g < nfacts && !is_landmark_fact[g]) { // fact-id が定義内にある かつ 事前に landmark fact に登録されていない
+                is_landmark_fact[g] = true;
+                landmarks.push_back(Landmark{ g, 1.0 });
+            }
+        }
+
+        // 後ろ向きに、ランドマークを登録していく
+        // ある landmark fact f を達成可能にする全ての achiever の pre の共通部分を P とする
+        // P に含まれる fact は f の前に必ず満たす必要があるので、それらを新たなランドマークとする
+
+        for (std::size_t idx = 0; idx < landmarks.size(); ++idx) {
+            int f = landmarks[idx].fact;
+            const auto& achs = achievers[f]; // landmark-fact f を達成するための fact の集合
+
+            if (achs.empty()) { // achiever が存在しない場合
+                continue;
+            }
+
+            // 共通部分の計算
+            std::vector<int> inter; // intersection
+            bool first = true;
+
+            for (int a : achs) {
+                const auto& pre = act_info[a].pre;
+
+                if (pre.empty()) { // 前提条件が空の achiever がある -> intersection は常に空
+                    inter.clear();
+                    first = false;
+                    break;
+                }
+
+                if (first) { // 最初に前提条件を登録する場合
+                    inter = pre;
+                    first = false;
+                } else {
+                    std::vector<int> tmp;
+
+                    std::set_intersection( // 計算量は O(n+m)
+                        inter.begin(), inter.end(), // 一つ目の集合の範囲
+                        pre.begin(), pre.end(), // 二つ目の集合の範囲
+                        std::back_inserter(tmp)); // 書き込み先
+                    
+                    inter.swap(tmp);
+
+                    if (inter.empty()) { // intersection が空になってしまった場合
+                        break;
+                    }
+                }
+            }
+
+            // 新しくランドマークに fact を登録する
+            for (int p : inter) {
+                if (p < 0 || p >= nfacts) { // fact-id が定義の外にある場合
+                    continue;
+                }
+
+                if (fact_in_init[p]) { // 初期状態で真の場合
+                    continue;
+                }
+
+                if (is_landmark_fact[p]) { // 既にランドマークに登録されている場合
+                    continue;
+                }
+
+                is_landmark_fact[p] = true; // ランドマークの判定用ベクタに登録する
+
+                landmarks.push_back(Landmark{ p, 1.0 }); // landmark facts に登録する
+            }
+        }
+    }
+
+    // 状態 s に対するヒューリスティック値 (未達成 landmark fact 数) を計算する関数
+    double compute(const State& s) const {
+        double h = 0.0;
+
+        for (const auto& lm : landmarks) {
+            int f = lm.fact; // fact-id
+            int var = fact_var[f];
+            int val = fact_val[f];
+
+            // 状態 s で landmark fact が真であるか判定する
+            bool satisfied = false;
+            if (0 <= var && var < (int)s.size()) {
+                if (s[var] == val) {
+                    satisfied = true;
+                }
+            }
+
+            if (!satisfied) { // true でない landmark fact が存在する場合
+                h += lm.weight;
+            }
+        }
+        return h;
+    }
+};
+
 
 HeuristicFn hff(const Task& T) {
     // Task ごとに FFData を構築する
     auto data = std::make_shared<FFData>(T);
+
+    return [data](const Task& /*unused*/, const State& s) -> double {
+        return data->compute(s);
+    };
+}
+
+HeuristicFn hlm(const Task& T) {
+    // Task ごとに landmark fact に関するデータを生成する
+    auto data = std::make_shared<LMData>(T);
 
     return [data](const Task& /*unused*/, const State& s) -> double {
         return data->compute(s);
