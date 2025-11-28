@@ -27,6 +27,7 @@ struct SearchParams {
     uint32_t num_bucket_shards = 0;
     uint32_t num_k_select = 2;
     uint32_t random_seed = 634u; // 探索ごとのランダムシード
+    uint32_t heuristic_kind = 0; // 0 -> blind, 1 -> goalcount, 2-> ff
 };
 
 // 探索結果
