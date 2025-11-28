@@ -39,7 +39,7 @@ static Heuristic hff(const Task& task) {
 }
 
 static Heuristic hlm(const Task& task) {
-    return Heuristic(planner::sas::hff(task));
+    return Heuristic(planner::sas::hlm(task));
 }
 
 };
