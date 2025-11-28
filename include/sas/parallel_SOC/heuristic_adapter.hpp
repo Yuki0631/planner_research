@@ -38,6 +38,10 @@ static Heuristic hff(const Task& task) {
     return Heuristic(planner::sas::hff(task));
 }
 
+static Heuristic hlm(const Task& task) {
+    return Heuristic(planner::sas::hff(task));
+}
+
 };
 
 } // namespace parallel_SOC

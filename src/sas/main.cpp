@@ -314,6 +314,7 @@ int main(int argc, char** argv) {
             } else if (hname == "ff") {
                 R = planner::sas::astar(T, planner::sas::hff(T), h_is_integer, P);
             } else if (hname == "lm") {
+                std::cout << "using landmark heuristic" << "\n";
                 R = planner::sas::astar(T, planner::sas::hlm(T), h_is_integer, P);
             } else {
                 throw std::runtime_error(hname + std::string(" is not defined."));
@@ -354,10 +355,16 @@ int main(int argc, char** argv) {
             // ヒューリスティック関数の調整
             if (hname == "blind") {
                 sp.heuristic_kind = 0;
+                std::cout << "using blind heuristic" << "\n";
             } else if (hname == "goalcount") {
                 sp.heuristic_kind = 1;
+                std::cout << "using goalcount heuristic" << "\n";
             } else if (hname == "ff") {
                 sp.heuristic_kind = 2;
+                std::cout << "using ff heuristic" << "\n";
+            } else if (hname == "lm") {
+                sp.heuristic_kind = 3;
+                std::cout << "using landmark heuristic" << "\n";
             } else {
                 std::cerr << "not defined heuristic name" << "\n";
             }

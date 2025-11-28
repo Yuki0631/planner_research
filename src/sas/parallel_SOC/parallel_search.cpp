@@ -113,6 +113,8 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
         hfn = Heuristic::goalcount();
     } else if (P.heuristic_kind == 2) {
         hfn = Heuristic::hff(T);
+    } else if (P.heuristic_kind == 3) {
+        hfn = Heuristic::hlm(T);
     } else {
         std::cerr << "not defined heuristic function" << "\n";
     }
