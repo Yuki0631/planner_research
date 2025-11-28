@@ -2,7 +2,7 @@
 #include <memory>
 #include <algorithm>
 #include <limits>
-
+#include <cmath>
 
 namespace planner { namespace sas {
 
@@ -111,14 +111,10 @@ struct FFData {
         }
     }
 
-    // limits::infinity でないか確認するための関数
-    bool is_finite(double x) const {
-        return x <= std::numeric_limits<double>::infinity() && x >= -std::numeric_limits<double>::infinity();
-    }
-
     // 状態 s に対する h^FF(s) を計算
     double compute(const State& s) const {
         const double INF = std::numeric_limits<double>::infinity();
+        const double PSEUDOINF = 1 << 16; // 疑似的な INF を 2^16 とする
         const Task& task = *T;
 
 
@@ -153,7 +149,7 @@ struct FFData {
                         break;
                     }
 
-                    if (!is_finite(h[p])) { // 前提条件の h_add のコストが無限大の場合
+                    if (!std::isfinite(h[p])) { // 前提条件の h_add のコストが無限大の場合
                         unreachable = true;
                         break;
                     }
@@ -187,11 +183,11 @@ struct FFData {
             int g = var_offset[v] + val;
 
             if (g < 0 || g >= nfacts) { // ゴールの変数と変数値がそもそも定義の外にある場合
-                return INF;
+                return PSEUDOINF;
             }
 
-            if (!is_finite(h[g])) { // ゴール条件が到達不可能な場合
-                return INF;
+            if (!std::isfinite(h[g])) { // ゴール条件が到達不可能な場合
+                return PSEUDOINF;
             }
         }
 
@@ -212,7 +208,7 @@ struct FFData {
             }
 
             if (supporter[g] < 0) { // サポータの値が -1 (unreachable) の場合
-                return INF;
+                return PSEUDOINF;
             }
 
             stack.push_back(g);
@@ -264,7 +260,7 @@ struct FFData {
                     }
 
                     if (supporter[p] < 0) { // サポータの値が -1 の場合 (unreachable)
-                        return INF;
+                        return PSEUDOINF;
                     }
 
                     stack.push_back(p); // スタックに積む
