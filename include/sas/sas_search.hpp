@@ -12,7 +12,7 @@
 
 namespace planner { namespace sas { // sas 
 
-// 盤面ノード
+// ノードの情報を保管するためのデータ構造
 struct Node {
     State s;
     int parent; // 親ノード id
