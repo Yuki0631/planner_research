@@ -347,6 +347,17 @@ int main(int argc, char** argv) {
 
             SearchParams sp;
 
+            // ヒューリスティック関数の調整
+            if (hname == "blind") {
+                sp.heuristic_kind = 0;
+            } else if (hname == "goalcount") {
+                sp.heuristic_kind = 1;
+            } else if (hname == "ff") {
+                sp.heuristic_kind = 2;
+            } else {
+                std::cerr << "not defined heuristic name" << "\n";
+            }
+
             // スレッド数の調整 (負ならば、使用しているハードウェアのスレッド数に合わせる)
             sp.num_threads = (soc_threads > 0) ? (uint32_t)soc_threads : std::max(1u, std::thread::hardware_concurrency());
 
@@ -411,7 +422,7 @@ int main(int argc, char** argv) {
                 std::cout << "Bucket empty probes: " << GS.per_thread[i].bucket_pop_empty_probes << "\n";
                 {
                 using namespace std::chrono;
-                const double secs = duration<double>(nanoseconds(total.relax_eval_ns)).count();
+                const double secs = duration<double>(nanoseconds(GS.per_thread[i].relax_eval_ns)).count();
                 std::cout << "Evaluation time: " << secs << " s\n";
                 }
                 std::cout << "Max open size: "  << GS.per_thread[i].max_open_size_seen << "\n";

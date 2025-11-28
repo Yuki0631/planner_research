@@ -4,6 +4,7 @@
 #include <limits>
 #include <unordered_map>
 #include <cmath>
+#include <iostream>
 
 // コンパイラに対するヒントのためのマクロ変数
 #define likely(x)   __builtin_expect(!!(x), 1) // よく起こりやすい条件分岐
@@ -104,6 +105,17 @@ SearchResult astar_soc(const sas::Task& T, const SearchParams& P, planner::sas::
     ClosedTable closed(std::max<uint32_t>(1024, N*64)); // クローズドリスト
     SharedOpen open(P.open_kind, Q, Sh, K); // オープンリスト
     Termination term(P.time_limit_ms); // 時間制限
+
+    // ヒューリスティック関数
+    if (P.heuristic_kind == 0) {
+        hfn = Heuristic::blind();
+    } else if (P.heuristic_kind == 1) {
+        hfn = Heuristic::goalcount();
+    } else if (P.heuristic_kind == 2) {
+        hfn = Heuristic::hff(T);
+    } else {
+        std::cerr << "not defined heuristic function" << "\n";
+    }
 
     ParentStore parents; // 解復元用の親ノードと適用演算子の情報を登録したテーブル
 
