@@ -62,6 +62,7 @@ target_include_directories(sas_reader PUBLIC ${CMAKE_SOURCE_DIR}/include)
 add_library(planner_sas_lib STATIC
     src/sas/sas_heuristic.cpp
     src/sas/sas_search.cpp
+    src/sas/bi_search.cpp
 )
 target_link_libraries(planner_sas_lib PUBLIC sas_reader)
 target_include_directories(planner_sas_lib PUBLIC ${CMAKE_SOURCE_DIR}/include)
