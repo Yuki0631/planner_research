@@ -314,7 +314,7 @@ int main(int argc, char** argv) {
             } else if (hname == "ff") {
                 R = planner::sas::astar(T, planner::sas::hff(T), h_is_integer, P);
             } else if (hname == "lm") {
-                std::cout << "using landmark heuristic" << "\n";
+                // std::cout << "using landmark heuristic" << "\n"; // デバッグ用
                 R = planner::sas::astar(T, planner::sas::hlm(T), h_is_integer, P);
             } else {
                 throw std::runtime_error(hname + std::string(" is not defined."));
