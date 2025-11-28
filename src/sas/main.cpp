@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
     //   [--search-mem-limit-mb int(MB)]
     //   [--fd containers/fast-downward.sif]
     //   [--sas-file sas/output.sas]
-    //   [--h goalcount|blind|ff]
+    //   [--h goalcount|blind|ff|lm]
     //   [--keep-sas]
     //   [--plan-out plans/plan.val]
     //   [--check-mutex auto|on|off]
@@ -68,7 +68,7 @@ int main(int argc, char** argv) {
             "       [--search-mem-limit-mb int(MB)]\n"
             "       [--fd   PATH_TO_SIF]\n"
             "       [--sas-file sas/output.sas]\n"
-            "       [--h goalcount|blind|ff]\n"
+            "       [--h goalcount|blind|ff|lm]\n"
             "       [--keep-sas]\n"
             "       [--plan-out plans/plan.val]\n"
             "       [--check-mutex auto|on|off]\n"
@@ -313,6 +313,8 @@ int main(int argc, char** argv) {
                 R = planner::sas::astar(T, planner::sas::blind(), h_is_integer, P);
             } else if (hname == "ff") {
                 R = planner::sas::astar(T, planner::sas::hff(T), h_is_integer, P);
+            } else if (hname == "lm") {
+                R = planner::sas::astar(T, planner::sas::hlm(T), h_is_integer, P);
             } else {
                 throw std::runtime_error(hname + std::string(" is not defined."));
             }
@@ -330,6 +332,8 @@ int main(int argc, char** argv) {
                 R = planner::sas::gbfs(T, planner::sas::blind(), h_is_integer, P);
             } else if (hname == "ff") {
                 R = planner::sas::gbfs(T, planner::sas::hff(T), h_is_integer, P);
+            } else if (hname == "lm") {
+                R = planner::sas::gbfs(T, planner::sas::hlm(T), h_is_integer, P);
             } else {
                 throw std::runtime_error(hname + std::string(" is not defined."));
             }
