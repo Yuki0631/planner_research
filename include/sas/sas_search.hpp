@@ -34,6 +34,8 @@ struct Result {
     std::vector<uint32_t> plan; // op index の列
     std::vector<Node> nodes; // 探索ノード（復元用）
     Stats stats;
+    bool meet = false;
+    uint8_t reg_plan_len = 0;
 };
 
 // 検索パラメータ（必要に応じて拡張）
