@@ -42,6 +42,7 @@ struct Result {
 struct Params {
     uint64_t max_expansions = (1ull<<62);
     bool reopen_closed = true;
+    bool stop_on_first_meet = true;
 };
 
 // --- ユーティリティ ---
