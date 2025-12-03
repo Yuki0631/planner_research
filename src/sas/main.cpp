@@ -14,6 +14,7 @@
 
 #include "sas/sas_reader.hpp"
 #include "sas/sas_search.hpp"
+#include "sas/bi_search.hpp"
 #include "sas/sas_heuristic.hpp"
 
 #include "sas/parallel_SOC/parallel_search.hpp"
@@ -48,7 +49,7 @@ int main(int argc, char** argv) {
     // 使い方
     // planner_from_pddl <domain.pddl> <problem.pddl>
     //   [--only-search]
-    //   [--algo astar|gbfs|soc_astar]
+    //   [--algo astar|gbfs|soc_astar|bi_search]
     //   [--search-cpu-limit int(second)]
     //   [--search-mem-limit-mb int(MB)]
     //   [--fd containers/fast-downward.sif]
@@ -59,11 +60,16 @@ int main(int argc, char** argv) {
     //   [--check-mutex auto|on|off]
     //   [--val /path/to/validate]
     //   [--val-args "-v"]
+    //   [--soc-threads N]
+    //   [--soc-open multi|bucket]
+    //   [--soc-queues Q]
+    //   [--soc-k K]
+    //   [--stop-on-first-meet on|off]
     if (argc < 3) {
         std::cerr <<
             "usage: planner_sas <domain.pddl> <problem.pddl>\n"
             "       [--only-search]\n"
-            "       [--algo astar|gbfs|soc_astar]\n"
+            "       [--algo astar|gbfs|soc_astar|bi_search]\n"
             "       [--search-cpu-limit int(second)]\n"
             "       [--search-mem-limit-mb int(MB)]\n"
             "       [--fd   PATH_TO_SIF]\n"
@@ -78,7 +84,9 @@ int main(int argc, char** argv) {
             "       [--soc-threads N]\n"
             "       [--soc-open multi|bucket]\n"
             "       [--soc-queues Q]\n"
-            "       [--soc-k K]\n";
+            "       [--soc-k K]\n"
+            "       # bidirectional search (bi_search) options\n"
+            "       [--stop-on-first-meet on|off]\n";
         return 1;
     }
 
@@ -105,6 +113,9 @@ int main(int argc, char** argv) {
     std::string soc_open = "bucket";
     int soc_queues = 0; // 0 の場合、スレッド数と同数のキューを用いる
     int soc_k = 2;
+
+    // bidirectional search options
+    std::string stop_on_first_meet = "on";
 
     for (int i=3; i<argc; ++i) {
         std::string a = argv[i];
@@ -160,6 +171,8 @@ int main(int argc, char** argv) {
             soc_queues = std::stoi(argv[++i]);
         } else if (a == "--soc-k" && i+1 < argc) {
             soc_k = std::stoi(argv[++i]);
+        } else if (a == "--stop-on-first-meet" && i+1 < argc) {
+            stop_on_first_meet = argv[++i];
         } else {
             std::cerr << "warning: unknown arg ignored: " << a << "\n";
         }
@@ -268,6 +281,12 @@ int main(int argc, char** argv) {
         }
 
         planner::sas::Params P;
+        if (stop_on_first_meet == "on") {
+            P.stop_on_first_meet = true;
+        } else {
+            P.stop_on_first_meet = false;
+        }
+
         bool h_is_integer = true;
 
         {
@@ -335,6 +354,25 @@ int main(int argc, char** argv) {
                 R = planner::sas::gbfs(T, planner::sas::hff(T), h_is_integer, P);
             } else if (hname == "lm") {
                 R = planner::sas::gbfs(T, planner::sas::hlm(T), h_is_integer, P);
+            } else {
+                throw std::runtime_error(hname + std::string(" is not defined."));
+            }
+
+            solved = R.solved;
+            if (solved) {
+                plan_ops_out = R.plan;
+                plan_cost_out = static_cast<int>(std::lround(planner::sas::eval_plan_cost(T, R.plan)));
+            }
+
+        } else if (algo == "bi_search") {
+            if (hname == "goalcount") {
+                R = planner::sas::bidir_astar(T, planner::sas::goalcount(), h_is_integer, P);
+            } else if (hname == "blind") {
+                R = planner::sas::bidir_astar(T, planner::sas::blind(), h_is_integer, P);
+            } else if (hname == "ff") {
+                R = planner::sas::bidir_astar(T, planner::sas::hff(T), h_is_integer, P);
+            } else if (hname == "lm") {
+                R = planner::sas::bidir_astar(T, planner::sas::hlm(T), h_is_integer, P);
             } else {
                 throw std::runtime_error(hname + std::string(" is not defined."));
             }
@@ -466,6 +504,16 @@ int main(int argc, char** argv) {
                 std::cout << "Expanded: " << R.stats.expanded << " state(s)" << "\n";
                 std::cout << "Generated: " << R.stats.generated << " state(s)" << "\n";
                 std::cout << "Evaluated: " << R.stats.evaluated << " state(s)" << "\n";
+            }
+
+            if (algo == "bi_search") {
+                std::cout << "Have metting: " << R.meet << "\n";
+                std::cout << "Plan length: " << R.plan.size() << "\n";
+
+                double meet_ratio = static_cast<double>(R.reg_plan_len) / static_cast<double>(R.plan.size());
+                meet_ratio = std::max(1-meet_ratio, meet_ratio);
+
+                std::cout << "Meet ratio: " << std::fixed << std::setprecision(3) << meet_ratio << "\n";
             }
 
             // VAL形式のテキストを生成
