@@ -543,7 +543,7 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
                         continue;
                     }
 
-                    const State& su = R.nodes[u].s; // 現在のノード
+                    const State su = R.nodes[u].s; // 現在のノード
 
                     // forward search でゴールにたどり着いてしまった場合
                     if (is_goal(T, su)) {
@@ -688,7 +688,7 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
                     continue;
                 }
 
-                const RegState& su = back_nodes[u].s; // 取り出したノードの state
+                const RegState su = back_nodes[u].s; // 取り出したノードの state
 
                 // regression search で初期状態にたどり着いてしまった場合
                 if (forward_state_satisfies_reg(s0, su)) {
