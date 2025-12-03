@@ -155,6 +155,8 @@ inline bool meet_forward_backward(const State& s, const RegState& reg) {
 
 // 前向き探索における演算子の適用の可否を判定する関数 (sas_search.cpp の is_applicable と同等)
 static inline bool is_applicable_forward(const Task& T, const State& s, const Operator& op) {
+    (void)T;
+
     // prevail 条件
     for (auto [v,val] : op.prevail) {
         if (s[v] != val) {
