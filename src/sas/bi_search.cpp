@@ -827,6 +827,13 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
         std::exit(201);
     }
 
+    if (!have_meeting) { // 両方向のオープンリストが空かつ meeting できない場合
+        R.solved = false;
+        R.plan.clear();
+        R.plan_cost = std::numeric_limits<double>::infinity(); // 負のコストにキャストまたはオーバーフローしてバグの元になるかも
+        return R;
+    }
+
     // --- プラン復元 ---
     // 前向き側: init → meeting forward state
     std::vector<uint32_t> prefix = extract_plan_forward(R.nodes, best_f); // 関数内で reverse されているので、initial state -> meeting forward state の順の action となる
