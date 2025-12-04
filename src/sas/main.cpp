@@ -511,9 +511,16 @@ int main(int argc, char** argv) {
                 std::cout << "Plan length: " << R.plan.size() << "\n";
 
                 double meet_ratio = static_cast<double>(R.reg_plan_len) / static_cast<double>(R.plan.size());
-                meet_ratio = std::max(1-meet_ratio, meet_ratio);
+                meet_ratio = std::min(1-meet_ratio, meet_ratio);
 
                 std::cout << "Meet ratio: " << std::fixed << std::setprecision(3) << meet_ratio << "\n";
+
+                // std::cout << "direction: " << R.which_directon << "\n"; // デバッグ用
+
+                if (R.which_directon != 0) {
+                    std::string side = (R.which_directon == 1) ? "forward" : "regression";
+                    std::cout << "Search ends: " << side << " side" << "\n"; 
+                }
             }
 
             // VAL形式のテキストを生成

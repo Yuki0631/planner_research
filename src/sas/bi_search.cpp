@@ -547,11 +547,13 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
 
                     // forward search でゴールにたどり着いてしまった場合
                     if (is_goal(T, su)) {
+                        std::cout << "reach a goal state in forward search" << "\n"; // デバッグ用
                         R.solved = true;
                         R.plan = extract_plan_forward(R.nodes, u);
                         R.plan_cost = eval_plan_cost(T, R.plan);
                         R.meet = false;
                         R.reg_plan_len = 0;
+                        R.which_directon = 1;
                         return R;
                     }
 
@@ -692,6 +694,7 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
 
                 // regression search で初期状態にたどり着いてしまった場合
                 if (forward_state_satisfies_reg(s0, su)) {
+                    std::cout << "reach the initial state in regression search" << "\n"; // デバッグ用
                     R.solved = true;
                     
                     for (int id = u; id >= 0 && back_nodes[id].parent >=0; id = back_nodes[id].parent) {
@@ -700,7 +703,8 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
 
                     R.plan_cost = eval_plan_cost(T, R.plan);
                     R.meet = false;
-                    R.reg_plan_len = static_cast<uint8_t>(R.plan.size());
+                    R.reg_plan_len = R.plan.size();
+                    R.which_directon = 2;
                     return R;
                 }
 
@@ -820,6 +824,8 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
             expand_forward_turn = !expand_forward_turn;
 
             if (p.stop_on_first_meet && have_meeting) { // forward search と regression search が meet した場合
+                R.which_directon = 0;
+                R.meet = true;
                 break;
             }
         }
@@ -846,6 +852,12 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
         suffix.push_back(back_nodes[b_id].act_id); // meeting regression state -> goal の順で action を積んでいく
     }
 
+    // デバッグ用
+    std::cout << "forward plan length: " << prefix.size() << "\n";
+    std::cout << "regression plan length: " << suffix.size() << "\n";
+
+    R.reg_plan_len = suffix.size();
+
     R.plan.clear();
     R.plan.reserve(prefix.size() + suffix.size());
     for (auto a : prefix) { // forward search のプランを順番にベクタに積む
@@ -855,8 +867,8 @@ Result bidir_astar(const Task& T, HeuristicFn h, bool h_is_integer, const Params
         R.plan.push_back(a); // regression search のプランを順番にベクタに積む
     }
 
-    R.solved     = true;
-    R.plan_cost  = eval_plan_cost_local(T, R.plan);
+    R.solved  = true;
+    R.plan_cost = eval_plan_cost_local(T, R.plan);
 
     return R;
 }

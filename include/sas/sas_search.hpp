@@ -35,7 +35,8 @@ struct Result {
     std::vector<Node> nodes; // 探索ノード（復元用）
     Stats stats;
     bool meet = false;
-    uint8_t reg_plan_len = 0;
+    size_t reg_plan_len = 0;
+    int which_directon = 0; // 1 -> forward で探索が終了, 2 -> regression で探索が終了, 0 -> meeting で探索が終了
 };
 
 // 検索パラメータ（必要に応じて拡張）
