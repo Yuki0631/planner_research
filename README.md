@@ -8,6 +8,10 @@ The FDR type planner uses fast-downward translator, but other functions are impl
 
 Some search algorithms and heuristic functions will be added later. 
 
+**ff heuristic and landmark heuristic** is introduce. (2025/12).
+
+**canonical bi-directional search algorithm** is introduced. (2025/12/03).
+
 It is assumed that this planner is used in Linux environment. 
 
 
@@ -31,6 +35,7 @@ The directory structure is shown in the following tree diagram.
 │   ├── parser.hpp
 │   ├── robin_hood.h
 │   ├── sas
+│   │   ├── bi_search.hpp
 │   │   ├── parallel_SOC
 │   │   │   ├── closed_table.hpp
 │   │   │   ├── concurrency.hpp
@@ -61,6 +66,7 @@ The directory structure is shown in the following tree diagram.
 │   ├── main.cpp
 │   ├── parser.cpp
 │   ├── sas
+│   │   ├── bi_search.cpp
 │   │   ├── main.cpp
 │   │   ├── parallel_SOC
 │   │   │   ├── closed_table.cpp
@@ -82,7 +88,7 @@ The directory structure is shown in the following tree diagram.
     ├── sas_reader_test.cpp
     └── strips_test.cpp
 
-9 directories, 53 files
+9 directories, 55 files
 ```
 
 This diagram omits pddl folder because it only includes test pddl files.
@@ -124,7 +130,7 @@ cmake .. && cmake --build . -j
 4.2 If you would like to use a **FDR type** planner, please enter this command. 
 
 ```{bash}
-./planner_sas <domain.pddl> <problem.pddl> [--algo astar|gbfs] [--search-cpu-limit int(second)] [--search-mem-limit-mb int(MB)] [--fd <fast-downward.sif>] [--sas-file <DIR>] [--h goalcount|blind] [--keep-sas] [--plan-out <DIR>] [--check-mutex on|off|auto] [--val <validate>] [--val-args]
+./planner_sas <domain.pddl> <problem.pddl> [--algo astar|gbfs|bi_search] [--search-cpu-limit int(second)] [--search-mem-limit-mb int(MB)] [--fd <fast-downward.sif>] [--sas-file <DIR>] [--h goalcount|blind] [--keep-sas] [--plan-out <DIR>] [--check-mutex on|off|auto] [--val <validate>] [--val-args]
 ```
 
 
